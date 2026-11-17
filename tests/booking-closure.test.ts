@@ -9,7 +9,7 @@ import { setMailTransportForTests } from "@/server/notify/transport";
 import { bookedRequests, repaymentPrompts } from "@/server/domain/views";
 import { act, appRow, createSubmittedCase, ctxFor, driveToOffer, makePdf, openTaskOf, preparePack, uploadSignedSaleContract } from "@/server/demo/scenario";
 import { addDaysToDateString, lagosDate } from "@/server/time";
-import { key, outbox, resetDb, staffId } from "./helpers";
+import { key, outbox, resetDb, staffId, audits } from "./helpers";
 
 beforeEach(async () => {
   await resetDb();
@@ -78,7 +78,7 @@ describe("disbursement booking", () => {
 });
 
 describe("closure actions", () => {
-  it("Complete Process queues exactly one closure email to Legal and Shariah, copying the initiator; vendor confirmation closes the case", async () => {
+  it("Complete Process emails the customer file to the initiator, copying the Unit Head and both credit reviewers; the initiator forwards it and confirms the sale", async () => {
     const id = await atBooking();
     await act(id, "DISBURSED", { booking: booking("TXC-1") });
     // Initiator cannot confirm vendor payment before CO3 completes the process.
@@ -88,8 +88,17 @@ describe("closure actions", () => {
     await act(id, "COMPLETE_PROCESS");
     const closure = await outbox("CLOSURE_PACK");
     expect(closure).toHaveLength(1);
-    expect(closure[0].to_addresses.sort()).toEqual(["legal.officer@altbank.ng", "legal@altbank.ng", "shariah.officer@altbank.ng", "shariah@altbank.ng"]);
-    expect(closure[0].cc_addresses).toEqual(["rm.ade@altbank.ng"]);
+    // Only people already authorised on this case receive the full file; Legal and Shariah get it forwarded by the initiator.
+    const a0 = await appRow(id);
+    const uh = (await db.query("SELECT s.email FROM decisions d JOIN staff s ON s.id = d.actor_id WHERE d.application_id = $1 AND d.stage = 'UNIT_HEAD_REVIEW' AND d.action = 'APPROVE'", [id])).rows.map((r) => r.email);
+    const reviewers = (await db.query("SELECT email FROM staff WHERE id = ANY($1::uuid[])", [[a0.first_reviewer_id, a0.second_reviewer_id].filter(Boolean)])).rows.map((r) => r.email);
+    expect(uh).toHaveLength(1);
+    expect(reviewers).toHaveLength(2);
+    expect(closure[0].to_addresses).toEqual(["rm.ade@altbank.ng"]);
+    expect([...closure[0].cc_addresses].sort()).toEqual([...new Set([...uh, ...reviewers])].sort());
+    expect(closure[0].cc_addresses.some((e: string) => /legal|shariah/.test(e))).toBe(false);
+    expect(closure[0].body_text).toMatch(/please forward this file to Legal and Shariah Compliance/);
+    expect(closure[0].body_text).toContain("legal@altbank.ng");
     expect(closure[0].attachment_document_ids.length).toBeGreaterThan(10);
     expect(closure[0].body_text).toContain("TXC-1");
     expect(closure[0].body_text).not.toMatch(/22212345678/);
@@ -103,7 +112,10 @@ describe("closure actions", () => {
     // The sale is completed only once the customer has signed the Murabaha sale contract.
     await expect(act(id, "CONFIRM_VENDOR_PAYMENT")).rejects.toThrow(/sale contract/);
     await uploadSignedSaleContract(id);
-    await act(id, "CONFIRM_VENDOR_PAYMENT");
+    // ...and the initiator must confirm they forwarded the file to Legal and Shariah.
+    await expect(act(id, "CONFIRM_VENDOR_PAYMENT")).rejects.toThrow(/forwarded the customer file/);
+    await act(id, "CONFIRM_VENDOR_PAYMENT", { packForwarded: true });
+    expect((await audits("CLOSURE_PACK_FORWARDED")).length).toBe(1);
     app = await appRow(id);
     expect(app.status).toBe("CLOSED");
     expect(app.vendor_confirmed_by).toBe(await staffId("rm.ade@altbank.ng"));
@@ -160,10 +172,12 @@ describe("closure actions", () => {
     expect((await caseAccess(db, legal, other)).canView).toBe(false);
   });
 
-  it("closure requires configured Legal and Shariah groups", async () => {
+  it("closure still works when no Legal or Shariah address is set up: the initiator is told to use the usual mailbox", async () => {
     const id = await atBooking();
     await act(id, "DISBURSED", { booking: booking("TXF-1") });
     await db.query("DELETE FROM recipient_group_members WHERE group_code = 'SHARIAH'");
-    await expect(act(id, "COMPLETE_PROCESS")).rejects.toThrow(/recipient groups must be configured/);
+    await act(id, "COMPLETE_PROCESS");
+    const closure = (await outbox("CLOSURE_PACK"))[0];
+    expect(closure.body_text).toMatch(/Shariah Compliance: no address set up in WakeelBoost/);
   });
 });

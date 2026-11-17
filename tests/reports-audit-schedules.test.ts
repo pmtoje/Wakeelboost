@@ -171,7 +171,7 @@ describe("scheduled emails", () => {
     expect((await outbox("WEEKLY_DIGEST")).length).toBe(1);
 
     await uploadSignedSaleContract(id, new Date(monday.getTime() + 3500_000));
-    await act(id, "CONFIRM_VENDOR_PAYMENT", {}, new Date(monday.getTime() + 3600_000));
+    await act(id, "CONFIRM_VENDOR_PAYMENT", { packForwarded: true }, new Date(monday.getTime() + 3600_000));
     const nextWeek = new Date(monday.getTime() - 7 * 86400_000 + 60_000);
     expect(currentWeeklyPeriod(nextWeek).startDate).toBe("2026-06-01");
     // Simulate the following run on a clean period key where the instalment is in range.
@@ -245,7 +245,7 @@ describe("sale completion reminders", () => {
     expect((await audits("SALE_COMPLETION_REMINDER_SENT")).length).toBe(2);
     // Once the sale is confirmed completed, reminders stop.
     await uploadSignedSaleContract(id);
-    await act(id, "CONFIRM_VENDOR_PAYMENT");
+    await act(id, "CONFIRM_VENDOR_PAYMENT", { packForwarded: true });
     expect(await runSaleCompletionReminders(at(start, 144))).toBe(0);
   });
 

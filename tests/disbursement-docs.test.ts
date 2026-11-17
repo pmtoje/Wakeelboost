@@ -225,7 +225,7 @@ describe("disbursement documents", () => {
     // Offer-stage documents can no longer be signed
     await expect(signOnTablet(ctx, id, "PRE_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/offer pack preparation/);
     // With the signed contract filed, the initiator confirms the sale is completed and the request closes.
-    await act(id, "CONFIRM_VENDOR_PAYMENT");
+    await act(id, "CONFIRM_VENDOR_PAYMENT", { packForwarded: true });
     expect((await db.query("SELECT status FROM applications WHERE id = $1", [id])).rows[0].status).toBe("CLOSED");
   });
 

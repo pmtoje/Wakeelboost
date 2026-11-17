@@ -32,7 +32,7 @@ function monthlyEquivalent(c: { instalments: unknown[]; assessment: { inputs: un
   return c.instalments.length > 0 && c.instalments.length !== tenor;
 }
 import { UploadPanel } from "@/components/UploadPanel";
-import { AssessmentForm, BookingForm, CrmsOkay, FirstReviewApprove, OfferLetterPanel, PrefillFormsButton, ReasonButton, RetryArchiveButton, ReminderButton, RevealIdentifiers, TaskButton } from "./CaseClient";
+import { AssessmentForm, BookingForm, CrmsOkay, FirstReviewApprove, OfferLetterPanel, PrefillFormsButton, SaleCompletion, ReasonButton, RetryArchiveButton, ReminderButton, RevealIdentifiers, TaskButton } from "./CaseClient";
 
 type Case = Awaited<ReturnType<typeof getCase>>;
 type SP = Record<string, string | undefined>;
@@ -1049,18 +1049,18 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
       body.push(<BookingForm key="b" hidden={hidden} approved={koboToNairaString(Number(app.requested_amount_kobo))} defaultDate={lagosDate(new Date())} doneHref={doneHref} />);
       break;
     case "COMPLETION":
-      body.push(<p key="t" className="small" style={{ margin: 0 }}>Queues one closure email with the full document pack and transaction summary to Legal and Shariah Compliance, copying the initiator. The request then returns to the initiator, who has the customer sign the Murabaha sale contract and confirms the sale is completed.</p>);
-      body.push(<TaskButton key="c" hidden={hidden} action="COMPLETE_PROCESS" label="Complete Process" confirm="Send the closure pack to Legal and Shariah Compliance and hand the request to the initiator to complete the sale?" doneHref={doneHref} />);
+      body.push(<p key="t" className="small" style={{ margin: 0 }}>Emails the full customer file and transaction summary to the initiator, copying the Unit Head who approved it and the credit reviewers. The initiator forwards it to Legal and Shariah Compliance, has the customer sign the Murabaha sale contract and confirms the sale is completed.</p>);
+      body.push(<TaskButton key="c" hidden={hidden} action="COMPLETE_PROCESS" label="Complete Process" confirm="Email the customer file to the initiator (copying the Unit Head and credit reviewers) and hand the request to the initiator to complete the sale?" doneHref={doneHref} />);
       break;
     case "VENDOR_CONFIRMATION":
-      body.push(<p key="t" className="small" style={{ margin: 0 }}>Credit Officer 3 has sent the pack. Have the customer sign the Murabaha sale contract, then confirm the sale is completed. This closes the request and activates repayment prompts. You don&apos;t need to wait for anyone else to confirm.</p>);
+      body.push(<p key="t" className="small" style={{ margin: 0 }}>The customer file was emailed to you: forward it to Legal and Shariah Compliance. Have the customer sign the Murabaha sale contract, then confirm the sale is completed. This closes the request and activates repayment prompts. You don&apos;t need to wait for anyone else to confirm.</p>);
       body.push(await DisbursementDocs({ key: "docs", appId: app.id, applicantType: app.applicant_type, docs, forms: formsForStage("VENDOR_CONFIRMATION"), note: "The bank has paid the vendor, so it now owns the goods. The customer signs the Murabaha sale contract (with the receipt of asset in Appendix A) to buy them from the bank on instalments." }));
       body.push(<UploadPanel key="u" compact applicationId={app.id} title="Upload signed sale contract" categories={["POST_DISBURSEMENT", "SUPPORTING"].map((x) => ({ code: x, label: CATEGORY_LABEL[x] }))} />);
       {
         const saleTpl = await activeTemplate(db, app.applicant_type as ApplicantType, "POST_DISBURSEMENT");
         const saleSigned = has("POST_DISBURSEMENT");
         if (saleTpl && !saleSigned) body.push(<Blocked key="sb">Waiting for the signed Murabaha sale contract (sign on the tablet or upload the signed copy).</Blocked>);
-        body.push(<TaskButton key="v" hidden={hidden} action="CONFIRM_VENDOR_PAYMENT" label="Confirm sale completed" disabled={!!saleTpl && !saleSigned} confirm="Confirm the sale is completed (the customer has signed the sale contract and the goods have been delivered) and close this request?" doneHref={doneHref} />);
+        body.push(<SaleCompletion key="v" hidden={hidden} doneHref={doneHref} blocked={!!saleTpl && !saleSigned} />);
       }
       break;
   }

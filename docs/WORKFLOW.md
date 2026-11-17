@@ -31,7 +31,7 @@ OFFER_PREPARATION (initiator: generate offer, upload signed offer, KYC, pre-disb
    ──submit pack──▶ CO3_PACK_REVIEW (Credit Officer 3, any route; uploads insurance evidence; may return pack)
    ──forward──▶ DISBURSEMENT_CHECK (DO1: "Logged CRMS" + Okay) ──send for correction──▶ DISBURSEMENT_CORRECTION (CO3) ──resubmit──▶ same DO1
    ──okay──▶ DISBURSEMENT_BOOKING (DO2: amount, date, ref, schedule → Disbursed; status BOOKED; CO3 + initiator notified)
-   ──▶ COMPLETION (CO3: Complete Process → one closure email to Legal + Shariah, cc initiator)
+   ──▶ COMPLETION (CO3: Complete Process → customer file emailed to the initiator, cc Unit Head + both credit reviewers; initiator forwards to Legal + Shariah)
    ──▶ VENDOR_CONFIRMATION (initiator) ──confirm──▶ CLOSED (repayment prompts active)
 
 Any approval stage ──reject (reason)──▶ REJECTED (initiator notified)
@@ -51,7 +51,7 @@ Any approval stage ──reject (reason)──▶ REJECTED (initiator notified)
 | DISBURSEMENT_CORRECTION | CO3 | Resubmit (to same DO1) | — |
 | DISBURSEMENT_BOOKING | DO2 | Disbursed | — |
 | COMPLETION | CO3 | Complete Process | — |
-| VENDOR_CONFIRMATION | Initiator | Confirm the sale is completed (customer has signed the Murabaha sale contract) and end the process; no CAD confirmation needed | Signed sale contract (Individual, Enterprise). Automatic reminder email to the initiator every 2 days while waiting, copying their line manager (business endorser) after a week; listed in the weekly summary |
+| VENDOR_CONFIRMATION | Initiator | Forward the customer file to Legal and Shariah, then confirm the sale is completed (customer has signed the Murabaha sale contract) and end the process; no CAD confirmation needed | Signed sale contract (Individual, Enterprise). Automatic reminder email to the initiator every 2 days while waiting, copying their line manager (business endorser) after a week; listed in the weekly summary |
 
 **Separation of duties.** Credit and approval stages exclude the initiator, the endorser and anyone who
 already decided on the case. DO1 excludes the pack CO3; DO2 excludes DO1. Super Admins cannot assign

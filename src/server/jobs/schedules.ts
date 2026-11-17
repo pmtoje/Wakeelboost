@@ -301,7 +301,7 @@ export async function runSaleCompletionReminders(now = new Date()): Promise<numb
           `Hello ${w.full_name},`,
           "",
           `Request ${w.ref} (${w.customer_name}) has been waiting for you to confirm the sale is completed for ${days} day${days === 1 ? "" : "s"}.`,
-          "Credit Officer 3 has already sent the pack. The request stays open, and repayment prompts do not start, until you confirm.",
+          "The customer file was emailed to you when Credit Officer 3 completed the process: forward it to Legal and Shariah Compliance if you have not yet. The request stays open, and repayment prompts do not start, until you confirm.",
           "",
           `Next step: ${next}.`,
           ...(manager ? ["", `${manager.name} (line manager) is copied because this request has waited more than a week.`] : []),

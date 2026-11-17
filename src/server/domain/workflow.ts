@@ -502,6 +502,8 @@ export interface TaskActionInput {
   /** Required when the assessment's Total DSR exceeds the threshold (first credit review approval). */
   dsrExceptionJustification?: string | null;
   crmsLogged?: boolean;
+  /** Sale completion: the initiator attests they forwarded the closure file to Legal and Shariah. */
+  packForwarded?: boolean;
   booking?: BookingInput;
 }
 
@@ -817,8 +819,10 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
         const signedSale = (await tx.query("SELECT 1 FROM documents WHERE application_id = $1 AND category = 'POST_DISBURSEMENT' AND superseded_at IS NULL AND scan_status = 'CLEAN'", [app.id])).rowCount;
         if (!signedSale) throw gate("The customer must sign the Murabaha sale contract first: sign it on the tablet or upload the signed copy.");
       }
+      if (!input.packForwarded) throw gate("Confirm you have forwarded the customer file to Legal and Shariah Compliance.");
       await recordDecision(tx, ctx, app, task, a, reason);
-      await completeTask(tx, ctx, task, a);
+      await completeTask(tx, ctx, task, a, { packForwardedToLegalShariah: true, attestedAt: ctx.now.toISOString() });
+      await audit(tx, ctx, { action: "CLOSURE_PACK_FORWARDED", actorRole: task.assignee_role, applicationId: app.id, stage: task.stage, details: { attestation: "Initiator confirmed the customer file was forwarded to Legal and Shariah Compliance" } });
       await tx.query(
         `UPDATE applications SET vendor_confirmed_at=$2, vendor_confirmed_by=$3, repayment_prompts_active_at=$2, closed_at=$2, retention_until=$4 WHERE id=$1`,
         [app.id, ctx.now, ctx.actor!.staffId, retentionDate(ctx.now)],
@@ -1077,7 +1081,11 @@ async function completeProcess(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow): Pr
   const members = (await tx.query<{ group_code: string; email: string }>("SELECT group_code, email FROM recipient_group_members ORDER BY group_code, email")).rows;
   const legal = members.filter((m) => m.group_code === "LEGAL").map((m) => m.email);
   const shariah = members.filter((m) => m.group_code === "SHARIAH").map((m) => m.email);
-  if (!legal.length || !shariah.length) throw gate("Legal and Shariah Compliance recipient groups must be configured by the Super Admin before completing the process.");
+  // The full file goes only to people already authorised to see it on this case: the initiator, copying the
+  // Unit Head who approved it and both credit reviewers. The initiator forwards it to Legal and Shariah.
+  const uh = (await tx.query<{ actor_id: string }>("SELECT actor_id FROM decisions WHERE application_id = $1 AND stage = 'UNIT_HEAD_REVIEW' AND action = 'APPROVE' ORDER BY seq DESC LIMIT 1", [app.id])).rows[0]?.actor_id ?? null;
+  const copyIds = [uh, app.first_reviewer_id, app.second_reviewer_id].filter((x): x is string => !!x && x !== app.initiator_id);
+  const copyTo = (await tx.query<{ email: string }>("SELECT email FROM staff WHERE id = ANY($1::uuid[]) AND status = 'ACTIVE' ORDER BY email", [copyIds])).rows.map((r) => r.email);
   const already = await tx.query("SELECT 1 FROM closure_events WHERE application_id = $1", [app.id]);
   if (already.rowCount) throw conflict("The process has already been completed for this request.");
   await recordDecision(tx, ctx, app, task, "COMPLETE_PROCESS", null);
@@ -1095,15 +1103,21 @@ async function completeProcess(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow): Pr
     [app.id, ctx.actor!.staffId, ctx.now, mode, ["LEGAL", "SHARIAH"], docs.map((d) => d.id)],
   );
   const initiatorEmail = await staffEmail(tx, app.initiator_id);
+  if (!initiatorEmail) throw gate("The initiator has no active email address to receive the closure file.");
   const out = await enqueueEmail(tx, ctx.now, {
     kind: "CLOSURE_PACK",
     dedupeKey: `closure:${app.id}`,
     applicationId: app.id,
-    to: [...legal, ...shariah],
-    cc: initiatorEmail ? [initiatorEmail] : [],
-    subject: `WakeelBoost ${app.ref}: closure pack and transaction summary`,
+    to: [initiatorEmail],
+    cc: copyTo,
+    subject: `WakeelBoost ${app.ref}: customer file to forward to Legal and Shariah`,
     text: simpleEmail([
-      `Closure pack for request ${app.ref}.`,
+      `Closure file for request ${app.ref}.`,
+      "",
+      "Initiator: please forward this file to Legal and Shariah Compliance, then confirm in WakeelBoost when you confirm the sale is completed.",
+      `Legal: ${legal.length ? legal.join(", ") : "no address set up in WakeelBoost; use the usual Legal mailbox"}`,
+      `Shariah Compliance: ${shariah.length ? shariah.join(", ") : "no address set up in WakeelBoost; use the usual Shariah Compliance mailbox"}`,
+      "Copied: the Unit Head who approved the request and the credit reviewers.",
       "",
       "Transaction summary",
       `Customer: ${app.customer_name}`,
@@ -1123,10 +1137,10 @@ async function completeProcess(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow): Pr
     attachmentDocumentIds: mode === "ATTACHMENTS" ? docs.map((d) => d.id) : [],
   });
   await tx.query("UPDATE closure_events SET outbox_id = $2 WHERE id = $1", [ce.rows[0].id, out.id]);
-  await audit(tx, ctx, { action: "CLOSURE_PACK_QUEUED", applicationId: app.id, stage: task.stage, details: { mode, documents: docs.length, groups: ["LEGAL", "SHARIAH"], outboxId: out.id } });
+  await audit(tx, ctx, { action: "CLOSURE_PACK_QUEUED", applicationId: app.id, stage: task.stage, details: { mode, documents: docs.length, to: "INITIATOR", copied: copyTo.length, forwardTo: ["LEGAL", "SHARIAH"], outboxId: out.id } });
   const chosen = await chooseAssignee(tx, app, "VENDOR_CONFIRMATION");
   await moveTo(tx, ctx, app, "VENDOR_CONFIRMATION", chosen);
-  return "Process completed. Closure pack queued to Legal and Shariah Compliance (initiator copied).";
+  return "Process completed. The customer file was emailed to the initiator (Unit Head and credit reviewers copied) to forward to Legal and Shariah Compliance.";
 }
 
 // ------------------------------------------------------------------ reminders

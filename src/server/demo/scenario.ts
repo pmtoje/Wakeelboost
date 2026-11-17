@@ -219,7 +219,7 @@ export async function preparePack(appId: string, now = new Date()) {
 export async function driveToClosed(appId: string, now = new Date(), txRef = `TRX${Date.now()}${Math.floor(Math.random() * 1000)}`) {
   await driveToSaleCompletion(appId, now, txRef);
   await uploadSignedSaleContract(appId, now);
-  await act(appId, "CONFIRM_VENDOR_PAYMENT", {}, now);
+  await act(appId, "CONFIRM_VENDOR_PAYMENT", { packForwarded: true }, now);
 }
 /** Everything up to the initiator's sale completion step (pack sent by Credit Officer 3). */
 export async function driveToSaleCompletion(appId: string, now = new Date(), txRef = `TRX${Date.now()}${Math.floor(Math.random() * 1000)}`) {

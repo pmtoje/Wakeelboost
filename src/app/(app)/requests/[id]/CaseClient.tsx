@@ -476,3 +476,21 @@ export function PrefillFormsButton({ applicationId }: { applicationId: string })
     </ActionForm>
   );
 }
+
+/** Initiator: confirm the sale is completed, attesting the customer file was forwarded to Legal and Shariah. */
+export function SaleCompletion({ hidden, doneHref, blocked }: { hidden: Hidden; doneHref: string; blocked: boolean }) {
+  const [on, setOn] = useState(false);
+  return (
+    <ActionForm action={taskActionAction} doneHref={doneHref}>
+      <Hiddens h={{ ...hidden, action: "CONFIRM_VENDOR_PAYMENT" }} />
+      <label className="toggle">
+        <input type="checkbox" name="packForwarded" checked={on} onChange={(e) => setOn(e.target.checked)} />
+        I have forwarded the customer file to Legal and Shariah Compliance
+      </label>
+      <span className="small muted">The file was emailed to you (Unit Head and credit reviewers copied) when Credit Officer 3 completed the process. Your confirmation is recorded in the audit trail.</span>
+      <div>
+        <SubmitButton disabled={!on || blocked}>Confirm sale completed</SubmitButton>
+      </div>
+    </ActionForm>
+  );
+}
