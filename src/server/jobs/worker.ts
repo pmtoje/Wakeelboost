@@ -1,9 +1,9 @@
-import { db } from "../db";
+import { db, withTx } from "../db";
 import { systemCtx } from "../context";
 import { processDueOfferLetters } from "../domain/offer-letters";
 import { processDueSaleContracts } from "../domain/disbursement-docs";
 import { processDueArchives } from "../domain/archive";
-import { auditOutsideTx } from "../audit";
+import { audit, auditOutsideTx } from "../audit";
 import { config } from "../config";
 import { objectStore } from "../storage";
 import { scanDocument } from "../domain/documents";
@@ -16,9 +16,27 @@ export async function rescanQuarantined(now = new Date()) {
   for (const r of rows) await scanDocument(systemCtx(now), r.id).catch((e) => console.error("[worker] scan failed", r.id, e));
 }
 
-/** Retention: purge blobs of documents on closed/rejected cases past retention_until (opt-in). */
+/**
+ * Retention: on closed/rejected cases past retention_until, delete document files and clear personal
+ * data held in the database (security review M12): BVNs, TIN, raw bureau responses, credit-check
+ * date of birth and phone, and the bodies of emails about the case. On by default in production.
+ * With a versioned S3 bucket, add a lifecycle rule that expires noncurrent versions.
+ */
 export async function retentionSweep(now = new Date()) {
   if (!config.retentionPurgeEnabled) return 0;
+  const due = (
+    await db.query<{ id: string }>("SELECT id FROM applications WHERE retention_until IS NOT NULL AND retention_until < $1 AND pii_purged_at IS NULL LIMIT 100", [now])
+  ).rows;
+  for (const a of due) {
+    await withTx(async (tx) => {
+      await tx.query("UPDATE application_versions SET bvn_enc = NULL, tin_enc = NULL WHERE application_id = $1", [a.id]);
+      await tx.query("UPDATE application_directors SET bvn_enc = NULL WHERE version_id IN (SELECT id FROM application_versions WHERE application_id = $1)", [a.id]);
+      await tx.query("UPDATE credit_checks SET bvn_enc = NULL, response_enc = NULL, date_of_birth = NULL, phone = NULL WHERE application_id = $1", [a.id]);
+      await tx.query("UPDATE notification_outbox SET body_text = '[purged after the retention period]' WHERE application_id = $1", [a.id]);
+      await tx.query("UPDATE applications SET pii_purged_at = $2 WHERE id = $1", [a.id, now]);
+      await audit(tx, systemCtx(now), { action: "PERSONAL_DATA_PURGED", applicationId: a.id, details: { fields: ["bvn", "tin", "directors.bvn", "credit_check.response", "credit_check.date_of_birth", "credit_check.phone", "email_bodies"] } });
+    });
+  }
   const rows = (
     await db.query<{ id: string; storage_key: string; application_id: string; version_no: number }>(
       `SELECT d.id, d.storage_key, d.application_id, d.version_no FROM documents d JOIN applications a ON a.id = d.application_id

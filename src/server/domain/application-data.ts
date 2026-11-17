@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
+import { hmac } from "../crypto";
 import { isValidDateString, lagosDate } from "../time";
 
 export const APPLICANT_TYPES = ["INDIVIDUAL", "ENTERPRISE", "LIMITED"] as const;
@@ -158,6 +159,14 @@ export interface MaterialProjectionInput {
  * Contact details, DAO code, POS serial, rental dates and the selected RBE are non-material.
  */
 export function materialDigest(m: MaterialProjectionInput): string {
+  // Keyed (security review M9): a plain SHA-256 over BVN/TIN could be reversed by guessing from a database copy.
+  return "h1:" + hmac("material:" + materialJson(m));
+}
+/** The unkeyed digest stored before 17 Nov 2026; only used to compare and upgrade old rows. */
+export function legacyMaterialDigest(m: MaterialProjectionInput): string {
+  return createHash("sha256").update(materialJson(m)).digest("hex");
+}
+function materialJson(m: MaterialProjectionInput): string {
   const p = {
     type: m.type,
     customerName: m.data.customerName,
@@ -174,5 +183,5 @@ export function materialDigest(m: MaterialProjectionInput): string {
     tin: m.tinPlain,
     directors: m.directors.map((x) => [x.fullName, x.bvnPlain]),
   };
-  return createHash("sha256").update(JSON.stringify(p)).digest("hex");
+  return JSON.stringify(p);
 }

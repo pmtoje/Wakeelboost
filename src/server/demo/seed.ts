@@ -63,8 +63,23 @@ export const EXTRA_DIRECTORY = [
   { email: "new.officer@altbank.ng", name: "Nkechi New-Officer", group: false },
 ];
 
+/** Set by the first production start (instrumentation-node.ts): this database holds live data. */
+export async function isProductionDatabase(q: Db): Promise<boolean> {
+  try {
+    return !!(await q.query("SELECT 1 FROM system_flags WHERE key = 'PRODUCTION_DATABASE'")).rowCount;
+  } catch {
+    return false; // no system_flags table yet: a fresh database
+  }
+}
+
+/**
+ * Real staff, groups and the bank's templates; synthetic demo staff only when asked (security review
+ * M2). Demo staff use real-looking @altbank.ng addresses (including a Super Admin), so they are
+ * refused on any database a production server has used, whatever the local APP_ENV says.
+ */
 export async function seedReferenceData(q: Db, opts: { includeDemo?: boolean } = {}) {
-  const includeDemo = opts.includeDemo ?? true;
+  if (opts.includeDemo && (await isProductionDatabase(q))) throw new Error("Refusing to create demo staff: this database is used by a production server.");
+  const includeDemo = opts.includeDemo ?? false;
   const staff = includeDemo ? [...REAL_STAFF, ...DEMO_STAFF] : [...REAL_STAFF];
   for (const s of staff) {
     const source = REAL_STAFF.some((r) => r.email === s.email) ? "seed" : "synthetic-seed";

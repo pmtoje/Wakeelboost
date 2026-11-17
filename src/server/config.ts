@@ -49,6 +49,13 @@ export const config = {
   get storageKey() {
     return keyFrom("STORAGE_ENCRYPTION_KEY");
   },
+  /** Previous keys still accepted for decryption during a key rotation (comma-separated base64). */
+  get previousFieldKeys(): Buffer[] {
+    return keyList("FIELD_ENCRYPTION_KEYS_PREVIOUS");
+  },
+  get previousStorageKeys(): Buffer[] {
+    return keyList("STORAGE_ENCRYPTION_KEYS_PREVIOUS");
+  },
   get sessionIdleSeconds() {
     return int("SESSION_IDLE_SECONDS", 300);
   },
@@ -111,7 +118,8 @@ export const config = {
     return int("RETENTION_YEARS", 10);
   },
   get retentionPurgeEnabled() {
-    return bool("RETENTION_PURGE_ENABLED", false);
+    // On by default in production (security review M12); a deliberate RETENTION_PURGE_ENABLED=false logs a warning.
+    return bool("RETENTION_PURGE_ENABLED", config.isProduction);
   },
   get mailDriver() {
     return str("MAIL_DRIVER", "resend") as "dev" | "smtp" | "resend";
@@ -179,6 +187,18 @@ const DEV_KEYS = new Set([
   "ZGV2LW9ubHktc3RvcmFnZS1rZXktY2hhbmdlLW1lLTM=",
 ]);
 
+function keyList(name: string): Buffer[] {
+  return (process.env[name] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((raw, i) => {
+      const buf = Buffer.from(raw, "base64");
+      if (buf.length !== 32) throw new Error(`${name} entry ${i + 1} must be 32 bytes, base64 encoded`);
+      return buf;
+    });
+}
+
 function keyFrom(name: string): Buffer {
   const raw = str(name);
   if (process.env.APP_ENV === "production" && DEV_KEYS.has(raw)) throw new Error(`${name} is the published development key; set a real secret in production`);
@@ -208,6 +228,11 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env): vo
   void config.hmacKey;
   void config.storageKey;
   if (config.trustedProxyHops < 1) throw new Error("TRUSTED_PROXY_HOPS must be at least 1 in production: serve WakeelBoost only behind the bank's reverse proxy.");
+  void config.previousFieldKeys;
+  void config.previousStorageKeys;
+  // Documents at rest must be encrypted (security review M10).
+  if (config.storageDriver === "s3" && config.s3.serverSideEncryption === "none") throw new Error("S3_SERVER_SIDE_ENCRYPTION=none is not allowed in production: use AES256 or aws:kms.");
+  if (!config.retentionPurgeEnabled) console.warn("[config] WARNING: RETENTION_PURGE_ENABLED=false. Personal data on requests past their retention date will not be purged.");
   // Email (sign-in codes, closure files, reminders) goes through Resend by the bank's decision (17 Nov 2026).
   if (config.mailDriver === "dev") throw new Error("MAIL_DRIVER=dev cannot be used in production.");
   if (config.mailDriver === "resend" && !config.resend.apiKey) throw new Error("RESEND_API_KEY is not set: staff could not receive sign-in codes.");

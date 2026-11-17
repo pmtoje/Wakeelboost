@@ -118,9 +118,36 @@ not received.
    `X-Forwarded-For`), and HTTPS on the proxy. Email stays on Resend (bank decision, 17 Nov 2026):
    set `MAIL_DRIVER=resend` and `RESEND_API_KEY`; production refuses to start without it. If SMTP is
    ever used instead, it must offer TLS (required in production).
-10. Run `npm run migrate` (adds `system_flags`) and `npm run seed`, then deploy.
+10. Run `npm run migrate` (adds `system_flags`, makes retention-purgeable columns nullable) and
+   `npm run seed` (real staff and the bank's templates only; demo data is refused in production),
+   then deploy. On first start the server marks the database as production, refuses to run while any
+   demo account is active, and upgrades stored change-detection digests to the keyed form.
+11. **Storage and retention**: S3 must use `S3_SERVER_SIDE_ENCRYPTION=AES256` or `aws:kms` (`none` is
+   refused). The retention purge is on by default in production; on a versioned bucket, add a
+   lifecycle rule that expires noncurrent object versions.
 
 ## Security fixes (17 Nov 2026)
+
+Medium findings (second pass, same day):
+
+- **Headers (M1).** A per-request Content-Security-Policy with a script nonce (no inline or third-party
+  scripts) and HSTS (one year). Session cookies are Secure in production.
+- **Demo accounts (M2).** Demo seeding is opt-in (`--with-demo`) and refused on any database a
+  production server has used; production refuses to start while a demo account is active.
+- **Request sizes (M3).** Middleware rejects oversized bodies by path before parsing (64 KB on sign-in,
+  1 MB generally, 4 MB for tablet signatures, 11 MB for admin imports, the upload limit + 1 MB for
+  documents); uploads must declare their length.
+- **Access (M5–M8).** Booked Requests honour a Reporting Admin's region scope; case and credit access
+  end when the role is removed; full BVN/TIN reveal is limited to the initiator, the officer holding the
+  case and the credit decision-makers; at disbursement correction Credit Officer 3 returns the pack to
+  the initiator instead of replacing customer-signed documents; bureau credit reports and DSR evidence
+  are restricted like the SeedFi report.
+- **Data protection (M9–M12).** The change-detection digest is keyed (HMAC), and old digests are upgraded
+  at startup. Encryption keys can be rotated: put the old key in `FIELD_ENCRYPTION_KEYS_PREVIOUS`
+  (or `STORAGE_ENCRYPTION_KEYS_PREVIOUS`), restart, run `npm run security:reencrypt`, then remove the
+  old key. Unencrypted S3 is refused in production. Past retention, the purge also clears BVNs, TIN,
+  raw bureau responses, credit-check date of birth and phone, and email bodies about the case.
+- **Sign-in timing (M14).** The code email is sent without delaying the response.
 
 - **Sign-in codes (H1).** Codes are 8 digits. After 10 wrong codes in 24 hours, across all codes, an
   account's sign-in locks; Super Admins get an email alert and can unlock it under Administration >

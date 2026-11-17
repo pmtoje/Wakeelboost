@@ -32,6 +32,13 @@ async function main() {
     }
   }
   const { migrate } = await import("../src/server/migrate");
+  // setup wipes the database: never on one a production server has used.
+  const { isProductionDatabase } = await import("../src/server/demo/seed");
+  const { db } = await import("../src/server/db");
+  if (process.env.APP_ENV === "production" || (await isProductionDatabase(db))) {
+    console.error("Refusing to run setup: it resets the database, and this is a production database.");
+    process.exit(1);
+  }
   await migrate(url, { reset: true, log: true });
   console.log("Database ready. Seeding synthetic data…");
   await import("./seed");

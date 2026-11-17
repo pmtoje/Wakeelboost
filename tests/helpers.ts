@@ -7,7 +7,7 @@ import { refreshSeedfiActivation } from "../src/server/domain/credit-check";
 /** Fresh schema + synthetic reference data for each test file. */
 export async function resetDb() {
   await migrate(process.env.DATABASE_URL!, { reset: true });
-  const ids = await seedReferenceData(db);
+  const ids = await seedReferenceData(db, { includeDemo: true });
   await refreshSeedfiActivation(db); // clears the in-memory activation flag along with the database
   return ids;
 }

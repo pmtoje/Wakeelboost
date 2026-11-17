@@ -33,6 +33,7 @@ import {
   displayCustomerName,
   draftDataSchema,
   materialDigest,
+  legacyMaterialDigest,
   validateForSubmission,
   type ApplicantType,
   type DraftData,
@@ -389,18 +390,20 @@ async function finaliseVersionForSubmission(tx: Tx, ctx: Ctx, app: AppRow): Prom
   if (Object.keys(errors).length) throw invalid("The request is incomplete. Fix the highlighted items and submit again.", errors);
   await assertCheckedIdentity(tx, { id: app.id, applicant_type: app.applicant_type, credit_check_status: app.credit_check_status ?? "NOT_REQUIRED", credit_check_id: app.credit_check_id ?? null, rm_proceeded_at: app.rm_proceeded_at ?? null }, version);
 
-  const digest = materialDigest({
+  const digestInput = {
     type: app.applicant_type,
     data: version.data,
     bvnPlain: version.bvn_enc ? decryptField(version.bvn_enc) : null,
     tinPlain: version.tin_enc ? decryptField(version.tin_enc) : null,
     directors: directors.map((d: { full_name: string; bvn_enc: string }) => ({ fullName: d.full_name, bvnPlain: decryptField(d.bvn_enc) })),
-  });
+  };
+  const digest = materialDigest(digestInput);
   let material = false;
   if (working) {
     if (app.current_version_id) {
       const prev = (await tx.query<{ material_digest: string }>("SELECT material_digest FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0];
-      material = prev.material_digest !== digest;
+      // A version stored before the keyed digest is compared in its old form (security review M9).
+      material = prev.material_digest?.startsWith("h1:") ? prev.material_digest !== digest : prev.material_digest !== legacyMaterialDigest(digestInput);
     }
     await tx.query("UPDATE application_versions SET submitted_at = $2, material_digest = $3 WHERE id = $1", [working.id, ctx.now, digest]);
     app.current_version_id = working.id;

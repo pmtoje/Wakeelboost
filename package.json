@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "mail:test": "tsx scripts/send-test-email.ts",
     "directory:import": "tsx scripts/import-directory.ts",
-    "setup": "tsx scripts/setup.ts"
+    "setup": "tsx scripts/setup.ts",
+    "security:reencrypt": "tsx scripts/reencrypt.ts"
   },
   "engines": {
     "node": ">=20.11"

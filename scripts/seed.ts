@@ -10,8 +10,10 @@ import { createSubmittedCase, act, approveFirstReview, driveToOffer, driveToClos
  * a handful of demo cases spread across the workflow so every queue has something in it.
  */
 async function main() {
-  if (process.env.APP_ENV === "production") throw new Error("Refusing to seed synthetic data in production.");
   const includeDemo = process.argv.includes("--with-demo");
+  // Production: real staff, recipient groups and the bank's templates only (idempotent). Demo data is
+  // refused here and, independently, on any database a production server has used.
+  if (includeDemo && process.env.APP_ENV === "production") throw new Error("Refusing to seed synthetic demo data in production.");
   await seedReferenceData(db, { includeDemo });
   const existing = await db.query("SELECT count(*)::int AS n FROM applications");
   if (includeDemo && existing.rows[0].n === 0 && !process.argv.includes("--no-cases")) {

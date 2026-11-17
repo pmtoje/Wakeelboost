@@ -250,6 +250,6 @@ export async function revealIdentifiers(ctx: Ctx, appId: string) {
   return {
     bvn: v?.bvn_enc ? decryptField(v.bvn_enc) : null,
     tin: v?.tin_enc ? decryptField(v.tin_enc) : null,
-    directors: dirs.map((d: { full_name: string; bvn_enc: string }) => ({ fullName: d.full_name, bvn: decryptField(d.bvn_enc) })),
+    directors: dirs.map((d: { full_name: string; bvn_enc: string | null }) => ({ fullName: d.full_name, bvn: d.bvn_enc ? decryptField(d.bvn_enc) : null })),
   };
 }

@@ -11,7 +11,7 @@ import { createSubmittedCase, driveToOffer, driveToClosed } from "../src/server/
  */
 async function main() {
   if (process.env.APP_ENV === "production") throw new Error("Refusing to run synthetic demo in production.");
-  await seedReferenceData(db);
+  await seedReferenceData(db, { includeDemo: true });
   const cases: [string, Parameters<typeof createSubmittedCase>[0]][] = [
     ["Route 1 · RM · Individual · ₦5,000,000.00", { initiator: "RM", type: "INDIVIDUAL", amountKobo: NAIRA(5_000_000) }],
     ["Route 2 · Merchant Officer · Enterprise · ₦5,000,000.01", { initiator: "MERCHANT_OFFICER", type: "ENTERPRISE", amountKobo: NAIRA(5_000_000) + 1 }],
