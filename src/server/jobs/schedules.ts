@@ -253,10 +253,13 @@ export async function runMonthlyReport(now = new Date()): Promise<{ ran: boolean
 
 /** Remind the initiator after this long at sale completion, and again at the same interval until closed. */
 export const SALE_REMINDER_EVERY_MS = 2 * 86400_000;
+/** From this long on, reminders also copy the initiator's line manager (the request's business endorser). */
+export const SALE_ESCALATE_AFTER_MS = 7 * 86400_000;
 
 /**
  * Worker: email initiators whose requests have waited at sale completion (VENDOR_CONFIRMATION) for two
- * days or more, then every two days until they confirm. Sent only during working hours (08:00–18:00
+ * days or more, then every two days until they confirm. After a week the initiator's line manager (the
+ * business endorser: RBE, ANM Lead or Merchant Officer Lead) is copied. Sent only during working hours (08:00–18:00
  * Lagos); each two-day window sends at most once (outbox dedupe), so restarts and several workers are safe.
  */
 export async function runSaleCompletionReminders(now = new Date()): Promise<number> {
@@ -265,9 +268,11 @@ export async function runSaleCompletionReminders(now = new Date()): Promise<numb
   const waiting = (
     await db.query(
       `SELECT t.id AS task_id, t.assigned_at, t.entered_at, a.id, a.ref, a.customer_name, s.email, s.full_name,
+              m.email AS manager_email, m.full_name AS manager_name, m.status AS manager_status,
               EXISTS (SELECT 1 FROM documents d WHERE d.application_id = a.id AND d.category = 'POST_DISBURSEMENT' AND d.superseded_at IS NULL AND d.scan_status = 'CLEAN') AS sale_signed,
               EXISTS (SELECT 1 FROM offer_templates o WHERE o.status = 'ACTIVE' AND o.doc_type = 'POST_DISBURSEMENT' AND (o.applicant_type = a.applicant_type OR o.applicant_type IS NULL)) AS sale_needed
          FROM tasks t JOIN applications a ON a.id = t.application_id JOIN staff s ON s.id = t.assignee_id
+         LEFT JOIN staff m ON m.id = a.endorser_id
         WHERE t.status = 'OPEN' AND t.stage = 'VENDOR_CONFIRMATION' AND s.status = 'ACTIVE'
           AND coalesce(t.assigned_at, t.entered_at) <= $1`,
       [new Date(now.getTime() - SALE_REMINDER_EVERY_MS)],
@@ -278,6 +283,8 @@ export async function runSaleCompletionReminders(now = new Date()): Promise<numb
     const since = new Date(w.assigned_at ?? w.entered_at);
     const days = Math.floor((now.getTime() - since.getTime()) / 86400_000);
     const window = Math.floor((now.getTime() - since.getTime()) / SALE_REMINDER_EVERY_MS);
+    const escalate = now.getTime() - since.getTime() >= SALE_ESCALATE_AFTER_MS;
+    const manager = escalate && w.manager_email && w.manager_status === "ACTIVE" && w.manager_email !== w.email ? { email: w.manager_email as string, name: w.manager_name as string } : null;
     const next =
       w.sale_needed && !w.sale_signed
         ? "have the customer sign the Murabaha sale contract (on the tablet, or upload the signed copy), then press Confirm sale completed"
@@ -288,7 +295,8 @@ export async function runSaleCompletionReminders(now = new Date()): Promise<numb
         dedupeKey: `sale-completion:${w.task_id}:${window}`,
         applicationId: w.id,
         to: [w.email],
-        subject: `Reminder: confirm sale completion for WakeelBoost ${w.ref}`,
+        cc: manager ? [manager.email] : [],
+        subject: `${manager ? "Overdue" : "Reminder"}: confirm sale completion for WakeelBoost ${w.ref}`,
         text: simpleEmail([
           `Hello ${w.full_name},`,
           "",
@@ -296,12 +304,13 @@ export async function runSaleCompletionReminders(now = new Date()): Promise<numb
           "Credit Officer 3 has already sent the pack. The request stays open, and repayment prompts do not start, until you confirm.",
           "",
           `Next step: ${next}.`,
+          ...(manager ? ["", `${manager.name} (line manager) is copied because this request has waited more than a week.`] : []),
           "",
           caseLink(w.id),
         ]),
       });
       if (!out.created) return false;
-      await audit(tx, systemCtx(now), { action: "SALE_COMPLETION_REMINDER_SENT", applicationId: w.id, stage: "VENDOR_CONFIRMATION", details: { taskId: w.task_id, daysWaiting: days, saleContractSigned: w.sale_signed, outboxId: out.id } });
+      await audit(tx, systemCtx(now), { action: "SALE_COMPLETION_REMINDER_SENT", applicationId: w.id, stage: "VENDOR_CONFIRMATION", details: { taskId: w.task_id, daysWaiting: days, saleContractSigned: w.sale_signed, outboxId: out.id, lineManagerCopied: manager?.email ?? null, escalationSkipped: escalate && !manager ? "line manager not available" : null } });
       return true;
     });
     if (created) sent++;

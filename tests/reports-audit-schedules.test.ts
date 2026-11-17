@@ -249,6 +249,24 @@ describe("sale completion reminders", () => {
     expect(await runSaleCompletionReminders(at(start, 144))).toBe(0);
   });
 
+  it("copies the initiator's line manager (the business endorser) once the request has waited a week", async () => {
+    const { id, start } = await waitingCase();
+    const rbe = (await db.query("SELECT s.email, s.full_name FROM applications a JOIN staff s ON s.id = a.endorser_id WHERE a.id = $1", [id])).rows[0];
+    for (const h of [48, 96, 144]) await runSaleCompletionReminders(at(start, h));
+    let mails = await outbox("SALE_COMPLETION_REMINDER");
+    expect(mails).toHaveLength(3);
+    expect(mails.every((m) => m.cc_addresses.length === 0)).toBe(true); // days 2, 4 and 6: initiator only
+    expect(await runSaleCompletionReminders(at(start, 192))).toBe(1); // day 8
+    mails = await outbox("SALE_COMPLETION_REMINDER");
+    const late = mails.find((m) => m.cc_addresses.length)!;
+    expect(late.to_addresses).toEqual(["rm.ade@altbank.ng"]);
+    expect(late.cc_addresses).toEqual([rbe.email]);
+    expect(late.subject).toMatch(/^Overdue:/);
+    expect(late.body_text).toContain(`${rbe.full_name} (line manager) is copied`);
+    const a = (await audits("SALE_COMPLETION_REMINDER_SENT")).find((x) => x.details.lineManagerCopied);
+    expect(a.details.lineManagerCopied).toBe(rbe.email);
+  });
+
   it("drops the sale contract step from the reminder once it is signed", async () => {
     const { id, start } = await waitingCase();
     await uploadSignedSaleContract(id);
