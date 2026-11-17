@@ -122,8 +122,9 @@ not received.
    `npm run seed` (real staff and the bank's templates only; demo data is refused in production),
    then deploy. On first start the server marks the database as production, refuses to run while any
    demo account is active, and upgrades stored change-detection digests to the keyed form.
-11. **Storage and retention**: documents are stored in the bank's SharePoint library
-   (`STORAGE_DRIVER=sharepoint`; the Microsoft 365 admin steps are in [SHAREPOINT.md](SHAREPOINT.md)).
+11. **Storage and retention**: documents are stored in a private AWS S3 bucket (`STORAGE_DRIVER=s3`,
+   `S3_SERVER_SIDE_ENCRYPTION=aws:kms`); bucket, IAM, lifecycle and cost alerts are in [AWS_S3.md](AWS_S3.md).
+   SharePoint is supported for later ([SHAREPOINT.md](SHAREPOINT.md)).
    Production refuses local storage. Documents already stored elsewhere are moved with
    `npm run storage:copy-to-sharepoint` (dry run, copy, then switch with the app stopped; see SHAREPOINT.md). If S3 is used instead, it must use `S3_SERVER_SIDE_ENCRYPTION=AES256`
    or `aws:kms` (`none` is refused). The retention purge is on by default in production; on a versioned bucket, add a
