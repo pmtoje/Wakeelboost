@@ -112,7 +112,28 @@ not received.
 6. **Worker**: at least one `npm run worker` (retries letters and archives, sends email).
 7. **Storage**: confirm the S3 bucket and KMS key permissions; archives are stored there encrypted.
 8. **Processing targets** (optional): Super Admin sets per-stage targets in God's Eye.
-9. Run `npm run migrate`, then deploy.
+9. **Security settings (security review)**: set `APP_ENV=production` explicitly (a production build
+   without APP_ENV refuses to start), real 32-byte keys (the published dev keys are refused),
+   `TRUSTED_PROXY_HOPS` of at least 1 (the bank's reverse proxy must append the client address to
+   `X-Forwarded-For`), and HTTPS on the proxy. SMTP must offer TLS (required in production).
+10. Run `npm run migrate` (adds `system_flags`) and `npm run seed`, then deploy.
+
+## Security fixes (17 Nov 2026)
+
+- **Sign-in codes (H1).** Codes are 8 digits. After 10 wrong codes in 24 hours, across all codes, an
+  account's sign-in locks; Super Admins get an email alert and can unlock it under Administration >
+  Staff (not their own). A bank-wide spike (100 wrong codes in an hour) also alerts Super Admins. Rate
+  limits are atomic, and the client IP comes only from the trusted proxy.
+- **Startup checks (H2).** The web server and worker exit at startup when a production build has no
+  APP_ENV, or when production uses dev keys or no trusted proxy. A production build run with
+  APP_ENV=development logs a prominent warning.
+- **Packages (H4).** nodemailer 10.6.0, zod 4.6.7, AWS SDK 3.1170 (no longer uses fast-xml-parser),
+  React 19.2.9; postcss pinned to 8.5.33 for Next.js. `npm audit` of production packages: 0 critical,
+  0 high (2 moderate remain, in exceljs's bundled uuid).
+- **SeedFi fails closed (H5).** The first production start with a working live SeedFi setup records
+  `SEEDFI_ACTIVATED` (shown on Administration > Credit check). From then on the check stays
+  mandatory: if SeedFi stops working, new requests wait at the credit check and Super Admins are
+  emailed (once a day); drafts are never released without a check.
 
 ## Rollback
 

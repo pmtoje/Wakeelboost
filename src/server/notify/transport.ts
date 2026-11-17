@@ -53,6 +53,8 @@ class SmtpTransport implements MailTransport {
         host: s.host,
         port: s.port,
         secure: s.secure,
+        // Production: refuse to send unless the connection is encrypted (STARTTLS on 587).
+        requireTLS: !s.secure && config.isProduction,
         auth: s.user ? { user: s.user, pass: s.pass } : undefined,
       });
     }
