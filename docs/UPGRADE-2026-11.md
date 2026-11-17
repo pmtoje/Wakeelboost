@@ -115,7 +115,9 @@ not received.
 9. **Security settings (security review)**: set `APP_ENV=production` explicitly (a production build
    without APP_ENV refuses to start), real 32-byte keys (the published dev keys are refused),
    `TRUSTED_PROXY_HOPS` of at least 1 (the bank's reverse proxy must append the client address to
-   `X-Forwarded-For`), and HTTPS on the proxy. SMTP must offer TLS (required in production).
+   `X-Forwarded-For`), and HTTPS on the proxy. Email stays on Resend (bank decision, 17 Nov 2026):
+   set `MAIL_DRIVER=resend` and `RESEND_API_KEY`; production refuses to start without it. If SMTP is
+   ever used instead, it must offer TLS (required in production).
 10. Run `npm run migrate` (adds `system_flags`) and `npm run seed`, then deploy.
 
 ## Security fixes (17 Nov 2026)

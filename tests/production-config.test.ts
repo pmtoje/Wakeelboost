@@ -4,7 +4,7 @@ import { assertProductionConfig, config } from "@/server/config";
 
 const saved = { ...process.env };
 afterEach(() => {
-  for (const k of ["APP_ENV", "FIELD_ENCRYPTION_KEY", "APP_HMAC_KEY", "STORAGE_ENCRYPTION_KEY", "TRUSTED_PROXY_HOPS", "COOKIE_SECURE"]) {
+  for (const k of ["APP_ENV", "FIELD_ENCRYPTION_KEY", "APP_HMAC_KEY", "STORAGE_ENCRYPTION_KEY", "TRUSTED_PROXY_HOPS", "COOKIE_SECURE", "MAIL_DRIVER", "RESEND_API_KEY"]) {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
   }
@@ -34,7 +34,20 @@ describe("production startup checks (security review H2)", () => {
     process.env.TRUSTED_PROXY_HOPS = "0";
     expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).toThrow(/TRUSTED_PROXY_HOPS/);
     process.env.TRUSTED_PROXY_HOPS = "1";
+    process.env.MAIL_DRIVER = "resend";
+    process.env.RESEND_API_KEY = "re_test_placeholder";
     expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).not.toThrow();
+  });
+
+  it("production refuses to start without working email (Resend key)", () => {
+    process.env.APP_ENV = "production";
+    realKeys();
+    process.env.TRUSTED_PROXY_HOPS = "1";
+    process.env.MAIL_DRIVER = "resend";
+    delete process.env.RESEND_API_KEY;
+    expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).toThrow(/RESEND_API_KEY/);
+    process.env.MAIL_DRIVER = "dev";
+    expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).toThrow(/MAIL_DRIVER=dev/);
   });
 
   it("session cookies are always Secure in production", () => {

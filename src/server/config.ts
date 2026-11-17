@@ -208,6 +208,11 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env): vo
   void config.hmacKey;
   void config.storageKey;
   if (config.trustedProxyHops < 1) throw new Error("TRUSTED_PROXY_HOPS must be at least 1 in production: serve WakeelBoost only behind the bank's reverse proxy.");
+  // Email (sign-in codes, closure files, reminders) goes through Resend by the bank's decision (17 Nov 2026).
+  if (config.mailDriver === "dev") throw new Error("MAIL_DRIVER=dev cannot be used in production.");
+  if (config.mailDriver === "resend" && !config.resend.apiKey) throw new Error("RESEND_API_KEY is not set: staff could not receive sign-in codes.");
+  if (config.mailDriver === "resend" && !config.resend.baseUrl.startsWith("https://")) throw new Error("RESEND_BASE_URL must use https.");
+  if (config.mailDriver === "smtp" && !config.smtp.host) throw new Error("SMTP_HOST is not set: staff could not receive sign-in codes.");
 }
 
 /** Guard used by development-only adapters. */
