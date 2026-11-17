@@ -22,6 +22,9 @@ export interface DemoStaff {
 export const REAL_STAFF: DemoStaff[] = [
   { email: "tomiwa.adebanjo@altbank.ng", name: "Tomiwa Adebanjo", roles: [{ role: "SUPER_ADMIN" }], unit: "IT" },
   { email: "paul.toje@altbank.ng", name: "Paul Toje", roles: [{ role: "SUPER_ADMIN" }], unit: "IT" },
+  // Unit Head approval applies to every transaction (all three credit routes). Anyone else the Super Admin
+  // later gives the UNIT_HEAD role joins the pool, and Unit Head tasks are shared among them.
+  { email: "omoseni.ademowo@altbank.ng", name: "Omoseni Ademowo", roles: [{ role: "UNIT_HEAD" }], unit: "Payment & Collection" },
 ];
 
 export const DEMO_STAFF: DemoStaff[] = [
@@ -41,7 +44,6 @@ export const DEMO_STAFF: DemoStaff[] = [
   { email: "co3@altbank.ng", name: "Amaka Credit-Three", roles: [{ role: "CREDIT_OFFICER_3" }], unit: "Credit" },
   { email: "lead1@altbank.ng", name: "Femi Lead-One", roles: [{ role: "CREDIT_LEAD_1" }], unit: "Credit" },
   { email: "lead2@altbank.ng", name: "Zainab Lead-Two", roles: [{ role: "CREDIT_LEAD_2" }], unit: "Credit" },
-  { email: "unit.head@altbank.ng", name: "Olu Unit-Head", roles: [{ role: "UNIT_HEAD" }], unit: "Credit" },
   { email: "div.head@altbank.ng", name: "Grace Divisional-Head", roles: [{ role: "DIVISIONAL_HEAD" }], unit: "Credit" },
   { email: "do1@altbank.ng", name: "Peter Disburse-One", roles: [{ role: "DISBURSEMENT_OFFICER_1" }], unit: "Operations" },
   { email: "do2@altbank.ng", name: "Mary Disburse-Two", roles: [{ role: "DISBURSEMENT_OFFICER_2" }], unit: "Operations" },

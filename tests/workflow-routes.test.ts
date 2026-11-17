@@ -46,7 +46,7 @@ describe("all three credit routes end to end (synthetic cases)", () => {
     expect(s[0].email).toBe("rbe.lagos@altbank.ng");
     expect(s[1].email).toBe("co1@altbank.ng");
     expect(["co2@altbank.ng", "co3@altbank.ng"]).toContain(s[2].email);
-    expect(s[3].email).toBe("unit.head@altbank.ng");
+    expect(s[3].email).toBe("omoseni.ademowo@altbank.ng");
     expect(s[4].email).toBe("div.head@altbank.ng");
     expect(s[5].email).toBe("rm.ade@altbank.ng");
     expect(s[6].email).toBe("co3@altbank.ng");
@@ -143,7 +143,7 @@ describe("random assignment eligibility and separation of duties", () => {
 
   it("an unstaffed stage creates an unassigned task surfaced to Super Admin and cannot be skipped", async () => {
     const admin = await ctxFor("superadmin@altbank.ng");
-    await revokeRole(admin, { staffId: await staffId("unit.head@altbank.ng"), role: "UNIT_HEAD" });
+    await revokeRole(admin, { staffId: await staffId("omoseni.ademowo@altbank.ng"), role: "UNIT_HEAD" });
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(10_000) });
     await act(id, "ENDORSE");
     await approveFirstReview(id);
@@ -164,7 +164,7 @@ describe("random assignment eligibility and separation of duties", () => {
 
   it("admin resolves an exception with an eligible officer only (and never themselves)", async () => {
     const admin = await ctxFor("superadmin@altbank.ng");
-    await revokeRole(admin, { staffId: await staffId("unit.head@altbank.ng"), role: "UNIT_HEAD" });
+    await revokeRole(admin, { staffId: await staffId("omoseni.ademowo@altbank.ng"), role: "UNIT_HEAD" });
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(10_000) });
     await act(id, "ENDORSE");
     await approveFirstReview(id);

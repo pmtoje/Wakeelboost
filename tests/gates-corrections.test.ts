@@ -161,7 +161,7 @@ describe("rejection and correction routing", () => {
     await act(id, "RESUBMIT");
     t = await openTaskOf(id);
     expect(t.stage).toBe("UNIT_HEAD_REVIEW");
-    expect(t.email).toBe("unit.head@altbank.ng");
+    expect(t.email).toBe("omoseni.ademowo@altbank.ng");
     // Approvals still valid (non-material)
     const inv = await db.query("SELECT count(*)::int AS n FROM decisions WHERE application_id = $1 AND invalidated_at IS NOT NULL", [id]);
     expect(inv.rows[0].n).toBe(0);

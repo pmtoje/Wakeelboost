@@ -44,7 +44,7 @@ describe("personal month-to-date metrics", () => {
     const m = await initiatorMetrics(db, rm, mtd);
     expect(m).toMatchObject({ initiated: 2, submitted: 2, requestedValue: NAIRA(3_000_000), approved: 1, approvedValue: NAIRA(2_000_000), disbursed: 1, disbursedValue: NAIRA(2_000_000), declined: 1, pending: 1 });
 
-    const uh = await approverMetrics(db, await staffId("unit.head@altbank.ng"), mtd);
+    const uh = await approverMetrics(db, await staffId("omoseni.ademowo@altbank.ng"), mtd);
     expect(uh).toMatchObject({ approved: 1, approvedValue: NAIRA(2_000_000), returned: 0, declined: 0 });
     expect(uh.reviewed).toBe(1);
     expect(uh.avgTurnaroundMs).not.toBeNull();
@@ -77,7 +77,7 @@ describe("personal month-to-date metrics", () => {
 
 describe("God's Eye", () => {
   it("is limited to the Super Admin, Divisional Head and Unit Head, and every view is audited", async () => {
-    for (const e of ["superadmin@altbank.ng", "div.head@altbank.ng", "unit.head@altbank.ng"]) await requireOversight(await ctxFor(e), "overview");
+    for (const e of ["superadmin@altbank.ng", "div.head@altbank.ng", "omoseni.ademowo@altbank.ng"]) await requireOversight(await ctxFor(e), "overview");
     for (const e of ["rm.ade@altbank.ng", "co3@altbank.ng", "pm@altbank.ng", "reports@altbank.ng"]) await expect(requireOversight(await ctxFor(e), "overview")).rejects.toThrow(/God's Eye is available/);
     const a = await audits("OVERSIGHT_VIEW");
     expect(a.filter((x) => x.outcome === "SUCCESS").length).toBe(3);
@@ -110,7 +110,7 @@ describe("God's Eye", () => {
   it("flags tasks over the Super Admin's processing target", async () => {
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000_000) });
     await db.query("UPDATE tasks SET entered_at = now() - interval '30 hours' WHERE application_id = $1 AND status = 'OPEN'", [id]);
-    await expect(setStageTarget(await ctxFor("unit.head@altbank.ng"), "BUSINESS_ENDORSEMENT", 24)).rejects.toThrow(/Only the Super Admin/);
+    await expect(setStageTarget(await ctxFor("omoseni.ademowo@altbank.ng"), "BUSINESS_ENDORSEMENT", 24)).rejects.toThrow(/Only the Super Admin/);
     await setStageTarget(await ctxFor("superadmin@altbank.ng"), "BUSINESS_ENDORSEMENT", 24);
     const row = (await openQueue(db, {})).find((r) => r.application_id === id)!;
     expect(row.target_hours).toBe(24);

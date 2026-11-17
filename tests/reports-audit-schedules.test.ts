@@ -199,18 +199,18 @@ describe("scheduled emails", () => {
     expect(r.ran).toBe(true);
     const mails = await outbox("MONTHLY_REPORT");
     const to = mails.flatMap((m) => m.to_addresses).sort();
-    expect(to).toEqual(["anm.lead.north@altbank.ng", "anm.lead.south@altbank.ng", "lead1@altbank.ng", "lead2@altbank.ng", "mo.lead@altbank.ng", "unit.head@altbank.ng"]);
+    expect(to).toEqual(["anm.lead.north@altbank.ng", "anm.lead.south@altbank.ng", "lead1@altbank.ng", "lead2@altbank.ng", "mo.lead@altbank.ng", "omoseni.ademowo@altbank.ng"]);
     const south = mails.find((m) => m.to_addresses[0] === "anm.lead.south@altbank.ng")!;
     expect(south.body_text).toContain("scope: SOUTH");
     expect(south.body_text).toContain("Submitted in month: 0");
-    const uh = mails.find((m) => m.to_addresses[0] === "unit.head@altbank.ng")!;
+    const uh = mails.find((m) => m.to_addresses[0] === "omoseni.ademowo@altbank.ng")!;
     expect(uh.body_text).toContain("bank-wide");
     expect(uh.body_text).toContain("Submitted in month: 1");
     expect((await runMonthlyReport(new Date("2026-07-01T08:00:00Z"))).ran).toBe(false);
 
     // Admin reconfigures schedule & recipients
     const sa = await ctxFor("superadmin@altbank.ng");
-    await updateMonthlySchedule(sa, { enabled: true, dayOfMonth: 3, hour: 9, minute: 30, recipientIds: [await staffId("unit.head@altbank.ng")] });
+    await updateMonthlySchedule(sa, { enabled: true, dayOfMonth: 3, hour: 9, minute: 30, recipientIds: [await staffId("omoseni.ademowo@altbank.ng")] });
     expect((await runMonthlyReport(new Date("2026-08-01T07:00:00Z"))).ran).toBe(false);
     const aug = await runMonthlyReport(new Date("2026-08-03T08:30:00Z"));
     expect(aug.ran).toBe(true);

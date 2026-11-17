@@ -7,7 +7,7 @@ import { caseAccess } from "@/server/domain/access";
 import { processOutbox, retryOutbox } from "@/server/jobs/outbox";
 import { setMailTransportForTests } from "@/server/notify/transport";
 import { bookedRequests, repaymentPrompts } from "@/server/domain/views";
-import { act, appRow, createSubmittedCase, ctxFor, driveToOffer, makePdf, openTaskOf, preparePack, uploadSignedSaleContract } from "@/server/demo/scenario";
+import { act, appRow, createSubmittedCase, ctxFor, driveToOffer, driveToSaleCompletion, makePdf, openTaskOf, preparePack, uploadSignedSaleContract } from "@/server/demo/scenario";
 import { addDaysToDateString, lagosDate } from "@/server/time";
 import { key, outbox, resetDb, staffId, audits } from "./helpers";
 
@@ -170,6 +170,17 @@ describe("closure actions", () => {
     expect((await caseAccess(db, legal, closed)).capacities).toEqual(["LEGAL_RECIPIENT"]);
     expect((await caseAccess(db, await staffId("shariah.officer@altbank.ng"), closed)).capacities).toEqual(["SHARIAH_RECIPIENT"]);
     expect((await caseAccess(db, legal, other)).canView).toBe(false);
+  });
+
+  it("the Unit Head approves and is copied on the closure file on every route, including Route 3", async () => {
+    const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(30_000_000) });
+    await driveToOffer(id);
+    expect((await appRow(id)).route).toBe(3);
+    const uh = (await db.query("SELECT s.email FROM decisions d JOIN staff s ON s.id = d.actor_id WHERE d.application_id = $1 AND d.stage = 'UNIT_HEAD_REVIEW' AND d.action = 'APPROVE'", [id])).rows;
+    expect(uh.map((r) => r.email)).toEqual(["omoseni.ademowo@altbank.ng"]);
+    await driveToSaleCompletion(id);
+    const closure = (await outbox("CLOSURE_PACK")).find((m) => m.application_id === id)!;
+    expect(closure.cc_addresses).toContain("omoseni.ademowo@altbank.ng");
   });
 
   it("closure still works when no Legal or Shariah address is set up: the initiator is told to use the usual mailbox", async () => {

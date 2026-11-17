@@ -68,7 +68,7 @@ Sessions end after 5 minutes without activity; just sign in again.
 | `rbe.lagos@altbank.ng` | Business endorsement |
 | `co1@altbank.ng`, `co2@altbank.ng`, `co3@altbank.ng` | Credit Officers (assessment, DSR, approvals) |
 | `lead1@altbank.ng`, `lead2@altbank.ng` | Credit Leads |
-| `unit.head@altbank.ng`, `div.head@altbank.ng` | Unit Head, Divisional Head |
+| `omoseni.ademowo@altbank.ng`, `div.head@altbank.ng` | Unit Head, Divisional Head |
 | `do1@altbank.ng`, `do2@altbank.ng` | Disbursement Officers |
 | `reports@altbank.ng` | Reports and exports |
 
