@@ -68,6 +68,8 @@ in the "WakeelBoost Security Review" document.
 
 ## Rollback
 
-The release adds tables and columns only (migrations 012 to 016); nothing existing is dropped. To roll
-back, redeploy the previous build; the extra tables are ignored by it. Restore the database backup
-only if data must be returned to its earlier state.
+No migration in this release deletes data. They add tables and columns, and some relax or replace
+constraints (for example, allowing more document types and letting retention clear personal fields).
+To roll back the application, redeploy the previous build; it ignores the extra tables and columns.
+Migrations are not reversed automatically: if the database itself must return to its earlier state,
+restore the backup taken in step 1 (anything entered since is lost).
