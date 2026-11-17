@@ -1,4 +1,4 @@
-import { BookUser, Percent, BarChart3, BookCheck, ClipboardList, FilePlus2, FileText, History, Inbox, LayoutGrid, Mail, Route, ShieldCheck, Users, UsersRound, CalendarClock } from "lucide-react";
+import { Eye, BookUser, Percent, BarChart3, BookCheck, ClipboardList, FilePlus2, FileText, History, Inbox, LayoutGrid, Mail, Route, ShieldCheck, Users, UsersRound, CalendarClock } from "lucide-react";
 import { requireUser } from "../_lib/auth";
 import { currentTheme } from "../_lib/theme";
 import { BankLogo, Footer, Wordmark } from "@/components/Brand";
@@ -20,6 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isInitiatorWs = isInitiatorRole(ws);
   const isAdmin = roles.includes("SUPER_ADMIN");
   const canReport = roles.includes("SUPER_ADMIN") || roles.includes("REPORTING_ADMIN");
+  const oversight = roles.includes("SUPER_ADMIN") || roles.includes("DIVISIONAL_HEAD") || roles.includes("UNIT_HEAD");
   const exceptions = isAdmin ? Number((await db.query("SELECT count(*) AS n FROM tasks WHERE status = 'OPEN' AND assignee_id IS NULL")).rows[0].n) : 0;
   const initials = session.fullName.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   return (
@@ -52,6 +53,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </>
           )}
         </div>
+        {oversight && (
+          <div className="nav-section">
+            <span className="nav-title">Management</span>
+            <NavLink href="/oversight" icon={<Eye {...ic} />}>
+              God&apos;s Eye
+            </NavLink>
+          </div>
+        )}
         {canReport && (ws === "SUPER_ADMIN" || ws === "REPORTING_ADMIN") && (
           <div className="nav-section">
             <span className="nav-title">Reporting</span>

@@ -8,6 +8,7 @@ import { formatKobo } from "@/server/money";
 import { formatDuration, formatLagos } from "@/server/time";
 import { SortHeader, pageHref } from "@/components/SortHeader";
 import { PageHeader } from "@/components/PageHeader";
+import { MyPerformance } from "@/components/MyPerformance";
 import { StageChip, WaitChip } from "@/components/Status";
 import { ArrowRight, Inbox, Search } from "lucide-react";
 
@@ -15,6 +16,7 @@ export const metadata = { title: "My Action Queue" };
 
 export default async function QueuePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const { session } = await requireUser();
+  const workspace = (session.activeRole ?? null) as Role | null;
   const sp = await searchParams;
   const q = await actionQueue(db, session.staffId, {
     sort: (sp.sort as QueueSort) ?? "waiting",
@@ -33,7 +35,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         eyebrow="Work"
-        title="My Action Queue"
+        title={workspace === "PRODUCT_MANAGER" ? "Credit Review Queue" : "My Action Queue"}
         intro={
           <>
             {q.allTotal} item{q.allTotal === 1 ? "" : "s"} assigned to you across all your roles.
@@ -41,6 +43,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
           </>
         }
       />
+      <MyPerformance staffId={session.staffId} workspace={workspace} />
       <form className="filters" method="get" role="search" aria-label="Filter queue">
         <div className="field">
           <label htmlFor="q">Search</label>

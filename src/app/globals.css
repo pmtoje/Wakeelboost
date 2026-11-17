@@ -410,3 +410,19 @@ dialog.modal::backdrop { background: rgb(0 0 0 / 60%); }
 @media (max-width: 760px) { .credit-result { grid-template-columns: 1fr; } }
 .consent-box { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: var(--space-3); margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .consent-box legend { font-weight: 700; font-size: 13px; padding: 0 6px; }
+
+/* Personal month-to-date summary */
+.my-perf { margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: 10px; }
+.my-perf h2 { font-size: 1rem; }
+.perf-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.metric-link { text-decoration: none; color: inherit; display: block; }
+.metric-link:hover { background: var(--surface-2); }
+.metric-link:focus-visible { outline: 2px solid var(--yellow); outline-offset: -2px; }
+
+/* God's Eye lifecycle */
+.lifecycle { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.lifecycle li { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; }
+.lifecycle li > svg.icon { width: 18px; height: 18px; margin-top: 2px; color: var(--muted); }
+.lifecycle li.lc-done > svg.icon { color: var(--success); }
+.lifecycle li.lc-current > svg.icon { color: var(--yellow); }
+.lifecycle li.lc-failed > svg.icon { color: var(--danger); }
