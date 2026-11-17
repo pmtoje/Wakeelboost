@@ -66,6 +66,59 @@ export const KNOWN_DOCX_PLACEHOLDERS = new Set([
   "#directors_rest", "/directors_rest",
 ]);
 
+/** Where each placeholder is populated from (shown to administrators as the variable mapping). */
+export const PLACEHOLDER_SOURCES: Record<string, string> = {
+  offer_date: "Date the letter is issued (Lagos)",
+  request_ref: "Facility reference (WB-…)",
+  customer_name: "Applicant legal name (Individual name / Name trading as Business / Company)",
+  proprietor_name: "Proprietor legal name (Enterprise)",
+  business_name: "Registered business name (Enterprise)",
+  company_name: "Company name (Corporate)",
+  customer_address: "Business address",
+  registration_number: "CAC registration number",
+  facility_type: "Always Murabaha",
+  cost_price: "Approved asset cost (principal) from the approved assessment",
+  cost_price_words: "Approved asset cost in words",
+  markup: "Murabaha markup amount from the approved assessment",
+  markup_rate_tenor: "Flat markup rate for the tenor (pricing settings)",
+  markup_rate_annual: "Annual markup rate (legacy calculators only)",
+  cost_plus_markup: "Total selling price (cost plus markup)",
+  cost_plus_markup_words: "Total selling price in words",
+  apr: "APR disclosure from the approved assessment",
+  tenor_months: "Approved tenor in months",
+  financed_items: "Goods financed (quantity and description)",
+  asset_cost: "Sum of item costs on the request",
+  instalment_frequency: "Monthly or weekly",
+  instalment_amount: "Periodic instalment from the approved assessment",
+  takaful_rate: "Takaful contribution %",
+  stamp_duty_rate: "Stamp duty %",
+  bvn: "Applicant / proprietor BVN (decrypted only into the letter)",
+  tin: "TIN",
+  first_director_name: "First director (Corporate)",
+  first_director_bvn: "First director BVN (Corporate)",
+  director_index: "Director number (repeating section)",
+  director_name: "Director name (repeating section)",
+  director_bvn: "Director BVN (repeating section)",
+  signatory_1_name: "First signatory (endorser, or RM on Corporate letters)",
+  signatory_1_title: "First signatory title",
+  signatory_2_name: "Second signatory (Offer templates settings, or endorser on Corporate letters)",
+  signatory_2_title: "Second signatory title",
+  "#directors_rest": "Start of repeating director paragraph",
+  "/directors_rest": "End of repeating director paragraph",
+};
+
+/** Placeholders used by a template, in order of first appearance. */
+export async function docxPlaceholders(buf: Buffer): Promise<string[]> {
+  const zip = await JSZip.loadAsync(buf);
+  const out: string[] = [];
+  for (const name of Object.keys(zip.files)) {
+    if (!PARTS.test(name)) continue;
+    const xml = await zip.file(name)!.async("string");
+    for (const m of xml.replace(/<[^>]+>/g, "").matchAll(TOKEN)) if (!out.includes(m[1] + m[2])) out.push(m[1] + m[2]);
+  }
+  return out;
+}
+
 /** Validate an uploaded DOCX template: readable, placeholders intact (one run each), required ones present. */
 export async function validateDocxTemplate(buf: Buffer, type: ApplicantType): Promise<string[]> {
   let zip: JSZip;
@@ -88,6 +141,10 @@ export async function validateDocxTemplate(buf: Buffer, type: ApplicantType): Pr
     }
     if (/<w:drawing[\s\S]*?<\/w:drawing>/.test(xml) && /signature/i.test(xml)) errors.push("Templates must not contain signature images.");
   }
+  // WakeelBoost is Murabaha (cost plus markup) only: refuse conventional or unrelated letters.
+  const text = (await zip.file("word/document.xml")!.async("string")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  if (!/murabaha/i.test(text)) errors.push("This is not a Murabaha offer letter: the wording must name the Murabaha (cost plus markup) structure.");
+  if (/interest\s+rate|rate\s+of\s+interest/i.test(text)) errors.push("The letter describes an interest rate. WakeelBoost letters use Murabaha markup terminology only.");
   for (const t of found) if (!KNOWN_DOCX_PLACEHOLDERS.has(t)) errors.push(`Unknown placeholder {{${t}}}.`);
   for (const r of REQUIRED_DOCX_PLACEHOLDERS[type]) if (!found.has(r)) errors.push(`Missing placeholder {{${r}}}.`);
   if (found.has("#directors_rest") !== found.has("/directors_rest")) errors.push("The {{#directors_rest}} … {{/directors_rest}} markers must both be in the same paragraph.");

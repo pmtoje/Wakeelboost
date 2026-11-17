@@ -103,6 +103,21 @@ svg.icon { width: 16px; height: 16px; flex-shrink: 0; vertical-align: -3px; }
 .shell { min-height: 100vh; display: grid; grid-template-columns: 228px minmax(0, 1fr); grid-template-rows: auto 1fr auto; grid-template-areas: "nav top" "nav main" "nav foot"; background: linear-gradient(to right, var(--nav-bg) 228px, transparent 228px); }
 .sidenav { grid-area: nav; background: var(--nav-bg); color: var(--nav-ink); padding: var(--space-5) var(--space-3); position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-5); border-right: 1px solid var(--line); }
 .sidenav .brand-block { padding: 0 var(--space-2); display: flex; flex-direction: column; gap: 6px; }
+/* The Alternative Bank logo: show the rendition that matches the surface (dark theme by default). */
+.bank-logo { display: inline-flex; align-items: center; line-height: 0; }
+.bank-logo img { height: auto; max-width: 100%; }
+.bank-logo-on-light { display: none; }
+:root[data-theme="light"] .bank-logo-on-dark { display: none; }
+:root[data-theme="light"] .bank-logo-on-light { display: inline-block; }
+.brand-bank { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--nav-muted); }
+.brand-bank .small { font-size: 11px; letter-spacing: 0.04em; }
+.mobile-brand { display: inline-flex; align-items: center; gap: 10px; }
+.bank-endorse { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); }
+.bank-endorse-text { font-size: 12px; letter-spacing: 0.04em; white-space: nowrap; }
+.auth-brand { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.auth-brand .bank-endorse { padding-left: 18px; border-left: 1px solid #ffffff2e; }
+:root[data-theme="light"] .auth-brand .bank-endorse { border-left-color: #1c1d2026; }
+@media (max-width: 520px) { .auth-brand .bank-endorse-text { display: none; } .auth-brand { gap: 12px; } .auth-brand .bank-endorse { padding-left: 12px; } }
 .nav-section { display: flex; flex-direction: column; gap: 2px; }
 .nav-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--nav-muted); padding: var(--space-1) var(--space-2); font-weight: 700; }
 .nav-link { color: var(--nav-ink); text-decoration: none; padding: 7px var(--space-2); border-radius: var(--radius-sm); display: flex; align-items: center; gap: 10px; font-size: 13.5px; position: relative; }

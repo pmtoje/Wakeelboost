@@ -1,7 +1,7 @@
 import { BookUser, Percent, BarChart3, BookCheck, ClipboardList, FilePlus2, FileText, History, Inbox, LayoutGrid, Mail, Route, ShieldCheck, Users, UsersRound, CalendarClock } from "lucide-react";
 import { requireUser } from "../_lib/auth";
 import { currentTheme } from "../_lib/theme";
-import { Footer, Wordmark } from "@/components/Brand";
+import { BankLogo, Footer, Wordmark } from "@/components/Brand";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { IdleWatcher } from "@/components/IdleWatcher";
 import { MobileNavToggle, NavLink, WorkspaceSelect } from "@/components/NavLink";
@@ -28,6 +28,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="brand-block desktop-only">
           <Wordmark href="/queue" />
           <span className="wordmark-app">WakeelBoost Work Desk</span>
+          <span className="brand-bank">
+            <span className="small">A platform of</span>
+            <BankLogo height={30} />
+          </span>
         </div>
         <div className="nav-section">
           <span className="nav-title">Work</span>
@@ -103,8 +107,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="topbar">
         <div className="topbar-left">
           <MobileNavToggle />
-          <span className="mobile-only">
+          <span className="mobile-only mobile-brand">
             <Wordmark href="/queue" />
+            <BankLogo height={22} />
           </span>
           <span className="small muted desktop-only">{ws ? `${ROLE_LABELS[ws]} workspace` : ""}</span>
         </div>

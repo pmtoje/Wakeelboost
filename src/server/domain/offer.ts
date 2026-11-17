@@ -1,19 +1,14 @@
 import type { Db } from "../db";
-import { withTx } from "../db";
 import type { Ctx } from "../context";
-import { audit } from "../audit";
-import { config } from "../config";
 import { decryptField } from "../crypto";
-import { forbidden, gate, notFound, invalid } from "../errors";
+import { forbidden, gate, invalid } from "../errors";
 import { formatKobo } from "../money";
 import { formatDateOnly, lagosDate } from "../time";
 import { approvedAssessment } from "./assessment";
-import { storeGeneratedDocument } from "./documents";
 import { objectStore } from "../storage";
 import { nairaInWords } from "../words";
 import { docxToPdf, renderDocx } from "./offer-docx";
 import { currentSecondSignatory } from "./signatory";
-import { holdsRole } from "./access";
 import { assetCostKobo, type ApplicantType, type DraftData } from "./application-data";
 
 /**
@@ -206,81 +201,91 @@ export function offerDocxValues(o: OfferData): { values: Record<string, string>;
   return { values, loops: { directors_rest: rest.map((d, i) => ({ director_index: String(i + 2), director_name: d.fullName, director_bvn: d.bvn })) } };
 }
 
-/** Generate a frozen offer letter from the active versioned template for the applicant type (initiator at offer preparation). */
+export interface BuiltOffer {
+  format: "DOCX" | "HTML";
+  main: { filename: string; mime: string; data: Buffer };
+  pdf: { filename: string; data: Buffer } | null;
+  /** Values the letter was populated with (for validation and the audit trail; identifiers excluded). */
+  values: Record<string, string>;
+  /** The approved assessment whose figures the letter carries. */
+  assessmentId: string;
+}
+
+/** Murabaha fields that must be present before a letter can be issued. */
+export const REQUIRED_OFFER_VALUES = ["customer_name", "request_ref", "financed_items", "cost_price", "markup", "cost_plus_markup", "tenor_months", "instalment_amount", "offer_date"] as const;
+
+/**
+ * Populate the active Murabaha template for an application from its approved facility record.
+ * Pure rendering: no rows are written here. Throws a gate error when mandatory data is missing.
+ */
+export async function buildOfferFiles(tx: Db, app: Record<string, unknown> & { id: string; ref: string; applicant_type: ApplicantType; current_version_id: string; initiator_id: string; endorser_id: string | null; initiator_role: string }, tpl: Record<string, unknown>, now: Date): Promise<BuiltOffer> {
+  const version = (await tx.query("SELECT * FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0];
+  if (!version) throw gate("The facility record has no submitted version.");
+  const directors = (await tx.query("SELECT * FROM application_directors WHERE version_id = $1 ORDER BY position", [version.id])).rows;
+  const assessment = await approvedAssessment(tx, app.id);
+  if (!assessment) throw gate("No approved credit assessment exists for this facility.");
+  const facilityType = String((assessment.inputs as Record<string, unknown>).facilityType ?? "MURABAHA");
+  if (facilityType !== "MURABAHA") throw gate("WakeelBoost issues Murabaha offer letters only. The approved assessment is not a Murabaha (cost plus markup) facility.");
+  const data = version.data as DraftData;
+  const bvn = version.bvn_enc ? decryptField(version.bvn_enc) : null;
+  const tin = version.tin_enc ? decryptField(version.tin_enc) : null;
+  const dirs = directors.map((d: { full_name: string; bvn_enc: string }) => ({ fullName: d.full_name, bvn: decryptField(d.bvn_enc) }));
+  if (tpl.format === "DOCX") {
+    const ppl = (await tx.query("SELECT id, full_name FROM staff WHERE id = ANY($1::uuid[])", [[app.initiator_id, app.endorser_id].filter(Boolean)])).rows;
+    const sig = await currentSecondSignatory(tx);
+    const nameOf = (id: string | null) => ppl.find((p: { id: string }) => p.id === id)?.full_name ?? "";
+    const endorserRole = app.initiator_role === "RM" ? "Regional Business Executive" : app.initiator_role === "MERCHANT_OFFICER" ? "Merchant Officer Lead" : "ANM Lead";
+    const initiatorTitle = app.initiator_role === "RM" ? "Relationship Manager" : app.initiator_role === "ANM" ? "Agent Network Manager" : "Merchant Officer";
+    const { values, loops } = offerDocxValues({
+      app,
+      data,
+      bvn,
+      tin,
+      directors: dirs,
+      assessment: assessment as unknown as OfferData["assessment"],
+      people: { initiatorName: nameOf(app.initiator_id), initiatorTitle, endorserName: nameOf(app.endorser_id), endorserTitle: endorserRole, secondSignatoryName: sig.name, secondSignatoryTitle: sig.title },
+      now,
+    });
+    const missing = REQUIRED_OFFER_VALUES.filter((k) => !String(values[k] ?? "").trim() || values[k] === "N0.00");
+    if (missing.length) throw gate(`The facility record is missing data required by the offer letter: ${missing.join(", ")}.`);
+    const template = await objectStore().get(String(tpl.storage_key));
+    const docx = await renderDocx(template, values, loops);
+    const pdfBuf = await docxToPdf(docx);
+    const safe = { ...values, bvn: values.bvn ? "(set)" : "", tin: values.tin ? "(set)" : "", first_director_bvn: values.first_director_bvn ? "(set)" : "" };
+    return {
+      format: "DOCX",
+      main: { filename: `Offer-${app.ref}-${String(app.applicant_type).toLowerCase()}-t${tpl.version}.docx`, mime: DOCX_MIME, data: docx },
+      pdf: pdfBuf ? { filename: `Offer-${app.ref}-t${tpl.version}.pdf`, data: pdfBuf } : null,
+      values: safe,
+      assessmentId: assessment.id,
+    };
+  }
+  const html = renderOffer(String(tpl.body_html), {
+    applicantType: app.applicant_type,
+    data,
+    bvn,
+    tin,
+    directors: dirs,
+    markupKobo: Number(assessment.markup_kobo),
+    markupRate: String((assessment.inputs as Record<string, unknown>).markupRatePercent ?? ""),
+    costPlusMarkupKobo: Number(assessment.cost_plus_markup_kobo),
+    assetCostKobo: Number((assessment.inputs as Record<string, unknown>).assetCostKobo ?? assetCostKobo(data.items)),
+    ref: app.ref,
+    offerDate: formatDateOnly(lagosDate(now)),
+  });
+  if (!html.trim()) throw invalid("Rendered offer is empty.");
+  return { format: "HTML", main: { filename: `Offer-${app.ref}-t${tpl.version}.html`, mime: "text/html", data: Buffer.from(wrapOfferDocument(html, app.ref), "utf8") }, pdf: null, values: { request_ref: app.ref }, assessmentId: assessment.id };
+}
+
+/**
+ * Initiator / Super Admin: generate (or retry) the facility's Murabaha offer letter now. Normally the
+ * letter is issued automatically when the Divisional Head approves; this only re-runs that process.
+ */
 export async function generateOffer(ctx: Ctx, appId: string) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
-  return withTx(async (tx) => {
-    const app = (await tx.query("SELECT * FROM applications WHERE id = $1 FOR UPDATE", [appId])).rows[0];
-    if (!app) throw notFound();
-    const task = (await tx.query("SELECT * FROM tasks WHERE application_id = $1 AND status = 'OPEN'", [appId])).rows[0];
-    if (!task || task.stage !== "OFFER_PREPARATION" || task.assignee_id !== actor.staffId || !(await holdsRole(tx, actor.staffId, task.assignee_role))) {
-      throw forbidden("The offer can only be generated by the initiator at offer preparation.");
-    }
-    const tpl = await activeTemplate(tx, app.applicant_type);
-    if (!tpl) throw gate("No active offer template is configured for this applicant type. Ask the Super Admin to activate the bank's approved template.");
-    if (config.isProduction && !tpl.production_approved) throw gate("The active offer template is not approved for production use.");
-    const version = (await tx.query("SELECT * FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0];
-    const directors = (await tx.query("SELECT * FROM application_directors WHERE version_id = $1 ORDER BY position", [version.id])).rows;
-    const assessment = await approvedAssessment(tx, appId);
-    if (!assessment) throw gate("No approved credit assessment exists for this request.");
-    const data = version.data as DraftData;
-    const bvn = version.bvn_enc ? decryptField(version.bvn_enc) : null;
-    const tin = version.tin_enc ? decryptField(version.tin_enc) : null;
-    const dirs = directors.map((d: { full_name: string; bvn_enc: string }) => ({ fullName: d.full_name, bvn: decryptField(d.bvn_enc) }));
-    const docMeta = { templateId: tpl.id, templateVersion: tpl.version as number, role: task.assignee_role, stage: app.stage, versionId: app.current_version_id };
-    let main: { id: string; version: number };
-    let pdf: { id: string; version: number } | null = null;
-    if (tpl.format === "DOCX") {
-      const ppl = (await tx.query("SELECT id, full_name FROM staff WHERE id = ANY($1::uuid[])", [[app.initiator_id, app.endorser_id].filter(Boolean)])).rows;
-      const sig = await currentSecondSignatory(tx);
-      const nameOf = (id: string | null) => ppl.find((p: { id: string }) => p.id === id)?.full_name ?? "";
-      const endorserRole = app.initiator_role === "RM" ? "Regional Business Executive" : app.initiator_role === "MERCHANT_OFFICER" ? "Merchant Officer Lead" : "ANM Lead";
-      const initiatorTitle = app.initiator_role === "RM" ? "Relationship Manager" : app.initiator_role === "ANM" ? "Agent Network Manager" : "Merchant Officer";
-      const { values, loops } = offerDocxValues({
-        app,
-        data,
-        bvn,
-        tin,
-        directors: dirs,
-        assessment: assessment as unknown as OfferData["assessment"],
-        people: { initiatorName: nameOf(app.initiator_id), initiatorTitle, endorserName: nameOf(app.endorser_id), endorserTitle: endorserRole, secondSignatoryName: sig.name, secondSignatoryTitle: sig.title },
-        now: ctx.now,
-      });
-      const template = await objectStore().get(tpl.storage_key);
-      const docx = await renderDocx(template, values, loops);
-      main = await storeGeneratedDocument(tx, ctx, { appId, category: "GENERATED_OFFER", filename: `Offer-${app.ref}-${String(app.applicant_type).toLowerCase()}-t${tpl.version}.docx`, mime: DOCX_MIME, data: docx, ...docMeta });
-      const pdfBuf = await docxToPdf(docx);
-      if (pdfBuf) pdf = await storeGeneratedDocument(tx, ctx, { appId, category: "GENERATED_OFFER_PDF", filename: `Offer-${app.ref}-t${tpl.version}.pdf`, mime: "application/pdf", data: pdfBuf, ...docMeta });
-    } else {
-      const html = renderOffer(tpl.body_html, {
-        applicantType: app.applicant_type,
-        data,
-        bvn,
-        tin,
-        directors: dirs,
-        markupKobo: Number(assessment.markup_kobo),
-        markupRate: String((assessment.inputs as Record<string, unknown>).markupRatePercent ?? ""),
-        costPlusMarkupKobo: Number(assessment.cost_plus_markup_kobo),
-        assetCostKobo: Number((assessment.inputs as Record<string, unknown>).assetCostKobo ?? assetCostKobo(data.items)),
-        ref: app.ref,
-        offerDate: formatDateOnly(lagosDate(ctx.now)),
-      });
-      if (!html.trim()) throw invalid("Rendered offer is empty.");
-      main = await storeGeneratedDocument(tx, ctx, { appId, category: "GENERATED_OFFER", filename: `Offer-${app.ref}-t${tpl.version}.html`, mime: "text/html", data: Buffer.from(wrapOfferDocument(html, app.ref), "utf8"), ...docMeta });
-    }
-    await tx.query("UPDATE applications SET offer_template_id = $2, updated_at = $3 WHERE id = $1", [appId, tpl.id, ctx.now]);
-    await audit(tx, ctx, {
-      action: "OFFER_GENERATED",
-      actorRole: task.assignee_role,
-      applicationId: appId,
-      stage: app.stage,
-      documentId: main.id,
-      documentVersion: main.version,
-      details: { templateId: tpl.id, templateName: tpl.name, templateVersion: tpl.version, format: tpl.format, applicantType: tpl.applicant_type, pdfCopy: !!pdf, assessmentId: assessment.id },
-    });
-    return { documentId: main.id, pdfDocumentId: pdf?.id ?? null, templateVersion: tpl.version as number, format: tpl.format as string };
-  });
+  const { requestOfferLetterNow } = await import("./offer-letters");
+  return requestOfferLetterNow(ctx, appId);
 }
 
 export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -313,3 +318,45 @@ export const DEV_OFFER_TEMPLATE = `<div style="border-bottom:4px solid #FFC20E;p
 {{#directors}}<p class="director">Director: {{director_name}} &mdash; BVN: {{director_bvn}}</p>{{/directors}}
 <p style="margin-top:32px">Accepted by: ______________________ &nbsp; Date: __________</p>
 <p>For: Alternative Bank &nbsp; ______________________</p>`;
+
+/**
+ * Clearly marked sample values for previewing a template version (Super Admin). Synthetic data only;
+ * the customer name states that the document is a sample and not an offer.
+ */
+export function sampleOfferValues(type: ApplicantType): { values: Record<string, string>; loops: Record<string, Record<string, string>[]> } {
+  const values: Record<string, string> = {
+    offer_date: "1st January 2026",
+    request_ref: "WB-SAMPLE-000000",
+    customer_name: type === "LIMITED" ? "SAMPLE COMPANY LTD (SAMPLE - NOT AN OFFER)" : type === "ENTERPRISE" ? "SAMPLE PROPRIETOR trading as SAMPLE STORES (SAMPLE - NOT AN OFFER)" : "SAMPLE CUSTOMER (SAMPLE - NOT AN OFFER)",
+    proprietor_name: "SAMPLE PROPRIETOR",
+    business_name: "SAMPLE STORES",
+    company_name: "SAMPLE COMPANY LTD (SAMPLE - NOT AN OFFER)",
+    customer_address: "1 Sample Street, Lagos",
+    registration_number: "BN000000",
+    facility_type: "Murabaha",
+    cost_price: "N1,000,000.00",
+    cost_price_words: "One Million Naira Only",
+    markup: "N100,000.00",
+    markup_rate_tenor: "10%",
+    markup_rate_annual: "",
+    cost_plus_markup: "N1,100,000.00",
+    cost_plus_markup_words: "One Million, One Hundred Thousand Naira Only",
+    apr: "0.00%",
+    tenor_months: "3",
+    financed_items: "100 sample items",
+    asset_cost: "N1,000,000.00",
+    instalment_frequency: "monthly",
+    instalment_amount: "N366,666.67",
+    takaful_rate: "0%",
+    stamp_duty_rate: "0.125%",
+    bvn: "00000000000",
+    tin: "00000000-0000",
+    first_director_name: "SAMPLE DIRECTOR ONE",
+    first_director_bvn: "00000000000",
+    signatory_1_name: "SAMPLE SIGNATORY",
+    signatory_1_title: "Regional Business Executive",
+    signatory_2_name: "SAMPLE SIGNATORY",
+    signatory_2_title: "Head, Payment & Collection",
+  };
+  return { values, loops: { directors_rest: type === "LIMITED" ? [{ director_index: "2", director_name: "SAMPLE DIRECTOR TWO", director_bvn: "00000000000" }] : [] } };
+}

@@ -148,7 +148,7 @@ export async function generateOfferAction(_p: ActionState, fd: FormData): Promis
   const { ctx } = await requireUser();
   try {
     const r = await generateOffer(ctx, str(fd, "applicationId"));
-    return { ok: true, message: `Offer generated from template version ${r.templateVersion}.`, nonce: Date.now() };
+    return { ok: true, message: `Murabaha offer letter issued from template version ${r.templateVersion}.`, nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
   }

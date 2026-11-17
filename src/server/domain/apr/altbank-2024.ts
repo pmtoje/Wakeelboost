@@ -51,7 +51,7 @@ export const altbankApr2024Calculator: AprCalculator = {
   productionValidated: false,
   validationNote: "APR reproduces the bank workbook. DSR is not defined in the workbook: definition awaiting bank confirmation before production use.",
   fields: [
-    { key: "facilityType", label: "Facility type", kind: "select", defaultValue: "MURABAHA", options: [{ value: "MURABAHA", label: "Murabaha" }, { value: "IJARAH", label: "Ijarah" }] },
+    { key: "facilityType", label: "Facility type", kind: "select", defaultValue: "MURABAHA", options: [{ value: "MURABAHA", label: "Murabaha (cost plus markup)" }] },
     { key: "amountApprovedKobo", label: "Amount approved", kind: "money", defaultFrom: "requestedAmount" },
     { key: "markupRatePercent", label: "Mark-up / rental rate (% per annum)", kind: "percent" },
     { key: "rateType", label: "Rate type", kind: "select", defaultValue: "FIXED", options: [{ value: "FIXED", label: "Fixed (flat)" }, { value: "REDUCING", label: "Reducing balance" }] },
@@ -75,7 +75,7 @@ export const altbankApr2024Calculator: AprCalculator = {
       return BigInt(v);
     };
     const facilityType = String(inputs.facilityType ?? "MURABAHA");
-    if (facilityType !== "MURABAHA" && facilityType !== "IJARAH") throw invalid("Facility type must be Murabaha or Ijarah.");
+    if (facilityType !== "MURABAHA") throw invalid("WakeelBoost facilities are Murabaha (cost plus markup) only.");
     const rateType = String(inputs.rateType ?? "FIXED");
     if (rateType !== "FIXED" && rateType !== "REDUCING") throw invalid("Rate type must be Fixed or Reducing.");
     const freq = FREQUENCIES[String(inputs.frequency ?? "")];

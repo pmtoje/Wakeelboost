@@ -25,7 +25,7 @@ When the initiator clicks **Generate offer letter**, the app does four things:
 | `{{proprietor_name}}`, `{{business_name}}` | Enterprise: proprietor legal name, registered business name |
 | `{{company_name}}` | Limited: company name |
 | `{{customer_address}}` | Business address from the request |
-| `{{facility_type}}` | Murabaha / Ijarah (from the APR assessment) |
+| `{{facility_type}}` | Always Murabaha (WakeelBoost is cost plus markup only) |
 | `{{cost_price}}`, `{{cost_price_words}}` | Cost price (a) = amount approved in the assessment, e.g. "N20,000,000.00", "Twenty Million Naira Only" |
 | `{{markup_rate_tenor}}` | Mark Up rate (b) = total mark-up ÷ cost price for the tenor (36% p.a. over 6 months → 18%) |
 | `{{markup_rate_annual}}`, `{{markup}}` | Annual rate entered in the assessment; total mark-up amount |

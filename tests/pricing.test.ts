@@ -223,7 +223,7 @@ describe("Super Admin pricing settings", () => {
     expect(snap!.outputs).toMatchObject({ flatMarkupRatePercent: "15" });
     const r = await generateOffer(await ctxFor("rm.ade@altbank.ng"), a);
     expect(r.format).toBe("DOCX");
-    const offerAudit = (await audits("OFFER_GENERATED")).at(-1);
+    const offerAudit = (await audits("OFFER_LETTER_ISSUED")).at(-1);
     expect(offerAudit.details.assessmentId).toBe(snap!.id);
     // B: approval blocked until recalculated under v2, which then prices at 20%
     await expect(act(b, "APPROVE", { invoiceLogged: true, invoiceDialogConfirmed: true })).rejects.toThrow(/pricing settings changed since this assessment \(v2 → v3\)/i);

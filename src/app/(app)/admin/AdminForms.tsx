@@ -98,16 +98,16 @@ export function TemplateForm({ defaultBody }: { defaultBody: string }) {
         <div className="field"><label htmlFor="tnotes">Notes / approval reference</label><input id="tnotes" name="notes" /></div>
       </div>
       <div className="field"><label htmlFor="tbody">Template HTML (placeholders required)</label><textarea id="tbody" name="bodyHtml" required defaultValue={defaultBody} style={{ minHeight: 280, fontFamily: "monospace", fontSize: 13 }} /></div>
-      <label className="check"><input type="checkbox" name="productionApproved" /> This is the bank-approved template (required for production offers)</label>
+      <label className="check"><input type="checkbox" name="productionApproved" /> Approve this version now (Super Admin approval; required before it can be activated)</label>
       <div><SubmitButton className="btn btn-dark">Save new version</SubmitButton></div>
     </ActionForm>
   );
 }
-export function ActivateTemplateButton({ templateId }: { templateId: string }) {
+export function ActivateTemplateButton({ templateId, rollback = false }: { templateId: string; rollback?: boolean }) {
   return (
     <ActionForm action={A.activateTemplateAction} className="row">
       <input type="hidden" name="templateId" value={templateId} />
-      <SubmitButton className="btn btn-sm btn-primary">Activate</SubmitButton>
+      <SubmitButton className="btn btn-sm btn-primary">{rollback ? "Roll back to this version" : "Activate"}</SubmitButton>
     </ActionForm>
   );
 }
@@ -160,7 +160,7 @@ export function UploadTemplateForm() {
         <div className="field"><label htmlFor="ut-notes">Notes / approval reference</label><input id="ut-notes" name="notes" /></div>
       </div>
       <div className="field"><label htmlFor="ut-file">Word template (.docx with placeholders)</label><input id="ut-file" type="file" name="file" accept=".docx" required /></div>
-      <label className="check"><input type="checkbox" name="productionApproved" /> This version is approved by the bank for production offers</label>
+      <label className="check"><input type="checkbox" name="productionApproved" /> Approve this version now (Super Admin approval; required before it can be activated)</label>
       <div><SubmitButton className="btn btn-dark">Upload new version</SubmitButton></div>
     </ActionForm>
   );
@@ -169,7 +169,7 @@ export function ApproveTemplateButton({ templateId }: { templateId: string }) {
   return (
     <ActionForm action={A.approveTemplateAction} className="row">
       <input type="hidden" name="templateId" value={templateId} />
-      <SubmitButton className="btn btn-sm">Approve for production</SubmitButton>
+      <SubmitButton className="btn btn-sm">Approve</SubmitButton>
     </ActionForm>
   );
 }

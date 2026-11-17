@@ -108,19 +108,19 @@ describe("template administration", () => {
   it("upload, approve and activate per applicant type; production needs an approved template", async () => {
     const sa = await ctxFor("superadmin@altbank.ng");
     const id = await createDocxTemplateVersion(sa, { name: "Murabaha Individual Offer", applicantType: "INDIVIDUAL", filename: "x.docx", data: readFileSync("templates/offers/murabaha-individual.docx"), productionApproved: false });
+    // Contractual wording is activated only after the Super Admin has approved it.
+    await expect(activateTemplate(sa, id)).rejects.toThrow(/Approve this template version before activating it/);
+    const v1 = (await db.query("SELECT id FROM offer_templates WHERE applicant_type = 'INDIVIDUAL' AND version = 1")).rows[0].id;
+    await db.query("UPDATE offer_templates SET production_approved = false WHERE id = $1", [v1]);
+    await approveTemplate(sa, id);
     await activateTemplate(sa, id);
     const active = (await db.query("SELECT applicant_type, version FROM offer_templates WHERE status = 'ACTIVE' ORDER BY applicant_type")).rows;
     expect(active).toEqual([{ applicant_type: "ENTERPRISE", version: 1 }, { applicant_type: "INDIVIDUAL", version: 2 }, { applicant_type: "LIMITED", version: 1 }]);
     const caseId = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000) });
     await driveToOffer(caseId);
-    process.env.APP_ENV = "production";
-    try {
-      await expect(generateOffer(await ctxFor("rm.ade@altbank.ng"), caseId)).rejects.toThrow(/not approved for production/);
-    } finally {
-      process.env.APP_ENV = "test";
-    }
-    await approveTemplate(sa, id);
     expect((await audits("TEMPLATE_APPROVED")).length).toBe(1);
+    // Rolling back to the earlier version: production refuses it while it is unapproved.
+    await expect(activateTemplate(sa, v1)).rejects.toThrow(/Approve this template version/);
     const r = await generateOffer(await ctxFor("rm.ade@altbank.ng"), caseId);
     expect(r.templateVersion).toBe(2);
     expect(r.format).toBe("DOCX");
@@ -144,7 +144,7 @@ describe("offer pack gate", () => {
   it("still requires the generated offer plus the signed pack", async () => {
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000) });
     await driveToOffer(id);
-    await expect(act(id, "SUBMIT_PACK")).rejects.toThrow(/generated offer/);
+    await expect(act(id, "SUBMIT_PACK")).rejects.toThrow(/Murabaha offer letter has not been issued/);
     await preparePack(id);
     await act(id, "SUBMIT_PACK");
   });

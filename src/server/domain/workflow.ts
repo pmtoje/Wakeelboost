@@ -21,6 +21,7 @@ import { last4 } from "../mask";
 import { formatKobo } from "../money";
 import { addDaysToDateString, isValidDateString, lagosDate, formatLagos } from "../time";
 import { enqueueEmail } from "../notify/outbox";
+import { kickOfferLetter, liveOfferLetter, requestOfferLetter } from "./offer-letters";
 import { simpleEmail, caseLink } from "../notify/templates";
 import {
   BVN_RE,
@@ -466,7 +467,7 @@ export async function performTaskAction(ctx: Ctx, input: TaskActionInput): Promi
   const actor = ctx.actor;
   if (!actor) throw forbidden();
   try {
-    return await withTx(async (tx) => {
+    const result = await withTx(async (tx) => {
       const t0 = (await tx.query<TaskRow>("SELECT * FROM tasks WHERE id = $1", [input.taskId])).rows[0];
       if (!t0) throw notFound("Task not found.");
       return idempotent(tx, ctx, input.idempotencyKey, `TASK:${input.action}`, t0.application_id, async () => {
@@ -500,6 +501,11 @@ export async function performTaskAction(ctx: Ctx, input: TaskActionInput): Promi
         return { applicationId: app.id, stage: app.stage, message };
       });
     });
+    if (result.stage === "OFFER_PREPARATION") {
+      // Issue the Murabaha letter straight away; the worker retries if this attempt fails.
+      void kickOfferLetter(result.applicationId).catch((e) => console.error("[offer-letter] inline generation failed", e));
+    }
+    return result;
   } catch (e) {
     if (e instanceof DomainError && (e.code === "FORBIDDEN" || e.code === "GATE")) {
       await auditOutsideTx(ctx, { action: `TASK_${input.action}`, outcome: e.code === "FORBIDDEN" ? "DENIED" : "FAILURE", reason: e.message, details: { taskId: input.taskId } });
@@ -595,7 +601,12 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
       const next: Stage = task.stage === "SECOND_CREDIT_REVIEW" ? "UNIT_HEAD_REVIEW" : task.stage === "UNIT_HEAD_REVIEW" ? "DIVISIONAL_HEAD_REVIEW" : "OFFER_PREPARATION";
       const chosen = await chooseAssignee(tx, app, next, {});
       await moveTo(tx, ctx, app, next, chosen);
-      return next === "OFFER_PREPARATION" ? "Approved. The initiator has been assigned to prepare the signed offer pack." : `Approved. Sent to ${STAGE_LABELS[next]}.`;
+      if (next === "OFFER_PREPARATION") {
+        // Approvals are complete: the Murabaha offer letter is generated automatically (after commit).
+        await requestOfferLetter(tx, ctx, app.id, "DIVISIONAL_HEAD_APPROVAL");
+        return "Approved. The Murabaha offer letter is being generated and the initiator has been assigned to prepare the signed offer pack.";
+      }
+      return `Approved. Sent to ${STAGE_LABELS[next]}.`;
     }
     case "CREDIT_CORRECTION": {
       if (a === "REQUEST_INITIATOR") return returnToInitiator(tx, ctx, app, task, reason!);
@@ -621,9 +632,12 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
     case "INITIATOR_CORRECTION":
       return resubmitByInitiator(tx, ctx, app, task);
     case "OFFER_PREPARATION": {
+      const letter = await liveOfferLetter(tx, app.id);
+      if (!letter || letter.status !== "ISSUED") throw gate(letter?.status === "FAILED" ? `The Murabaha offer letter has not been issued: ${letter.last_error ?? "generation failed"}. Retry generation first.` : "The Murabaha offer letter has not been issued yet.");
+      if (letter.acceptance_status !== "SIGNED") throw gate("Upload the customer-signed offer letter before submitting the pack.");
       const docs = await currentCleanDocuments(tx, app.id);
       const cats = new Set(docs.map((d) => d.category));
-      const missing = ["GENERATED_OFFER", ...PACK].filter((c) => !cats.has(c));
+      const missing = PACK.filter((c) => !cats.has(c));
       if (missing.length) throw gate(`The offer pack is incomplete. Missing: ${missing.map((m) => m.replace(/_/g, " ").toLowerCase()).join(", ")}.`);
       await recordDecision(tx, ctx, app, task, a, reason);
       await completeTask(tx, ctx, task, a);

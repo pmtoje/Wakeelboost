@@ -127,6 +127,7 @@ async function insertDocumentRow(
     role: string | null;
     stage: string;
     versionId: string | null;
+    uploadedBy?: string;
   },
 ): Promise<{ id: string; version: number; slot: string }> {
   const cat = DOC_CATEGORIES.find((c) => c.code === p.category);
@@ -145,7 +146,7 @@ async function insertDocumentRow(
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
     [
       p.appId, p.category, slot, version, p.filename, p.mime, p.data.length, sha256Hex(p.data), p.storageKey, p.status,
-      p.generated ?? false, p.templateId ?? null, p.templateVersion ?? null, ctx.actor!.staffId, p.role, ctx.now, p.stage, p.versionId,
+      p.generated ?? false, p.templateId ?? null, p.templateVersion ?? null, p.uploadedBy ?? ctx.actor!.staffId, p.role, ctx.now, p.stage, p.versionId,
     ],
   );
   const id = ins.rows[0].id;
@@ -218,6 +219,11 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
         stage: app.stage,
         versionId: draftVersion?.id ?? app.current_version_id,
       });
+      if (input.category === "SIGNED_OFFER") {
+        // Customer acceptance of the issued Murabaha letter (dynamic import avoids a module cycle).
+        const { recordSignedOffer } = await import("./offer-letters");
+        await recordSignedOffer(tx, ctx, app.id, r.id);
+      }
       await audit(tx, ctx, {
         action: "DOCUMENT_UPLOADED",
         actorRole: role,
@@ -247,7 +253,7 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
 export async function storeGeneratedDocument(
   tx: Tx,
   ctx: Ctx,
-  p: { appId: string; category: string; filename: string; mime: string; data: Buffer; templateId: string; templateVersion: number; role: string; stage: string; versionId: string | null },
+  p: { appId: string; category: string; filename: string; mime: string; data: Buffer; templateId: string | null; templateVersion: number | null; role: string; stage: string; versionId: string | null; uploadedBy?: string },
 ) {
   const key = `documents/${p.appId}/${randomUUID()}`;
   await objectStore().put(key, p.data, p.mime);

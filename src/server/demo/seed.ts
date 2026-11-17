@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { objectStore } from "../storage";
+import { docxPlaceholders } from "../domain/offer-docx";
 import { DOCX_MIME } from "../domain/offer";
 import type { Role } from "../domain/roles";
 
@@ -113,9 +114,9 @@ export async function seedOfferTemplates(q: Db) {
     const key = `templates/offer/${randomUUID()}.docx`;
     await objectStore().put(key, data, DOCX_MIME);
     await q.query(
-      `INSERT INTO offer_templates (name, version, format, applicant_type, storage_key, source_filename, status, production_approved, notes, activated_at)
-       VALUES ($1, 1, 'DOCX', $2, $3, $4, 'ACTIVE', false, $5, now())`,
-      [`Murabaha ${t.type === "LIMITED" ? "Corporate" : t.type.charAt(0) + t.type.slice(1).toLowerCase()} Offer`, t.type, key, t.source, "Bank letter 9-1-24 with WakeelBoost placeholders. Approve after reviewing a generated letter."],
+      `INSERT INTO offer_templates (name, version, format, applicant_type, storage_key, source_filename, status, production_approved, notes, activated_at, variables, validated_at)
+       VALUES ($1, 1, 'DOCX', $2, $3, $4, 'ACTIVE', false, $5, now(), $6, now())`,
+      [`Murabaha ${t.type === "LIMITED" ? "Corporate" : t.type.charAt(0) + t.type.slice(1).toLowerCase()} Offer`, t.type, key, t.source, "Bank letter 9-1-24 with WakeelBoost placeholders. Super Admin: review a sample, then approve.", JSON.stringify(await docxPlaceholders(data))],
     );
   }
 }

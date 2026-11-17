@@ -24,7 +24,7 @@ export const wakeelboostPricingCalculator: AprCalculator = {
     { key: "tenorMonths", label: "Facility tenor (months)", kind: "integer", defaultFrom: "tenorMonths" },
     { key: "existingObligationsKobo", label: "Verified existing monthly repayment obligations (enter 0 if none)", kind: "money" },
     { key: "repaymentFrequency", label: "Repayment frequency", kind: "select", defaultValue: "MONTHLY", options: [{ value: "MONTHLY", label: "Monthly" }, { value: "WEEKLY", label: "Weekly (4 instalments a month)" }] },
-    { key: "facilityType", label: "Facility type (APR disclosure)", kind: "select", defaultValue: "MURABAHA", options: [{ value: "MURABAHA", label: "Murabaha" }, { value: "IJARAH", label: "Ijarah" }] },
+    { key: "facilityType", label: "Facility type", kind: "select", defaultValue: "MURABAHA", options: [{ value: "MURABAHA", label: "Murabaha (cost plus markup)" }] },
     { key: "takafulPercent", label: "Takaful contribution % (APR disclosure)", kind: "percent", defaultValue: "0" },
     { key: "stampDutyPercent", label: "Stamp duty % (APR disclosure)", kind: "percent", defaultValue: "0.125" },
   ],
@@ -47,7 +47,7 @@ export const wakeelboostPricingCalculator: AprCalculator = {
       context.pricing,
     );
     const ft = String(inputs.facilityType ?? "MURABAHA");
-    if (ft !== "MURABAHA" && ft !== "IJARAH") throw invalid("Facility type must be Murabaha or Ijarah.");
+    if (ft !== "MURABAHA") throw invalid("WakeelBoost facilities are Murabaha (cost plus markup) only.");
     const tak = parsePercentE4(String(inputs.takafulPercent ?? "0"));
     const stamp = parsePercentE4(String(inputs.stampDutyPercent ?? "0"));
     if (tak === null || stamp === null) throw invalid("Enter Takaful and stamp duty as percentages.");

@@ -186,6 +186,14 @@ describe("APR / DSR calculator", () => {
   for (const f of fixtures) {
     const fx = JSON.parse(readFileSync(path.join(dir, f), "utf8"));
     for (const c of fx.cases) {
+      if (c.inputs.facilityType === "IJARAH") {
+        // The bank workbook also covers Ijarah; WakeelBoost is Murabaha only, so these rows are refused.
+        it(`${fx.calculator} fixture refused (Murabaha only): ${c.name}`, () => {
+          const calc = listCalculators().find((x) => `${x.id}@${x.version}` === fx.calculator)!;
+          expect(() => calc.calculate(c.inputs)).toThrow(/Murabaha \(cost plus markup\) only/);
+        });
+        continue;
+      }
       it(`${fx.calculator} fixture: ${c.name}`, () => {
         const calc = listCalculators().find((x) => `${x.id}@${x.version}` === fx.calculator)!;
         const r = calc.calculate(c.inputs, fx.settings ? { pricing: { ...fx.settings, effectiveFrom: new Date(fx.settings.effectiveFrom) } } : undefined);
@@ -224,7 +232,7 @@ describe("APR / DSR calculator", () => {
     expect(r.dsrPercent).toBe("34.5000");
     expect(() => calc.calculate({ ...base, tenorMonths: 72 })).toThrow(/60 months/);
     expect(() => calc.calculate({ ...base, frequency: "Quarterly", tenorMonths: 7 })).toThrow(/cannot be paid/);
-    expect(() => calc.calculate({ ...base, facilityType: "OVERDRAFT" })).toThrow(/Murabaha or Ijarah/);
+    expect(() => calc.calculate({ ...base, facilityType: "OVERDRAFT" })).toThrow(/Murabaha \(cost plus markup\) only/);
     expect(calc.productionValidated).toBe(false); // DSR definition awaiting bank confirmation
   });
   it("the development calculator is not production validated", () => {

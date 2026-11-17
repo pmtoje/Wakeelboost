@@ -14,12 +14,39 @@ export function Wordmark({ href = "/", app = false }: { href?: string; app?: boo
   );
 }
 
+/**
+ * Official The Alternative Bank logo (approved asset, public/brand). Two renditions: light lettering
+ * for dark surfaces and dark lettering for light surfaces; CSS shows the one that matches the theme.
+ * The logo is never redrawn or recoloured.
+ */
+export function BankLogo({ height = 28, className = "" }: { height?: number; className?: string }) {
+  const width = Math.round((height * 451) / 214);
+  return (
+    <span className={`bank-logo ${className}`} role="img" aria-label="The Alternative Bank">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="bank-logo-on-dark" src="/brand/altbank-logo-on-dark.png" width={width} height={height} alt="" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="bank-logo-on-light" src="/brand/altbank-logo-on-light.png" width={width} height={height} alt="" />
+    </span>
+  );
+}
+
+/** "WakeelBoost · a platform of The Alternative Bank" endorsement line. */
+export function BankEndorsement({ height = 24 }: { height?: number }) {
+  return (
+    <span className="bank-endorse">
+      <span className="bank-endorse-text">A platform of</span>
+      <BankLogo height={height} />
+    </span>
+  );
+}
+
 export const FOOTER_TEXT = "Powered by DKTA Technologies @2026";
 
 export function Footer({ className = "footer" }: { className?: string }) {
   return (
     <footer className={className}>
-      <span>WakeelBoost Work Desk · Internal use only</span>
+      <span>WakeelBoost Work Desk · The Alternative Bank · Internal use only</span>
       <span>{FOOTER_TEXT}</span>
     </footer>
   );
@@ -44,7 +71,10 @@ export function AuthScene({ children, theme }: { children: React.ReactNode; them
         />
       </figure>
       <header className="auth-header">
-        <Wordmark href="/sign-in" />
+        <div className="auth-brand">
+          <Wordmark href="/sign-in" />
+          <BankEndorsement height={34} />
+        </div>
         <ThemeToggle initial={theme} variant="pill" />
       </header>
       <main className="auth-main" id="main">

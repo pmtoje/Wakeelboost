@@ -18,6 +18,7 @@ import { maskWithLast4 } from "@/server/mask";
 import { config } from "@/server/config";
 import { StageChip, OutcomeChip } from "@/components/Status";
 import { activeTemplate } from "@/server/domain/offer";
+import { liveOfferLetter } from "@/server/domain/offer-letters";
 import { PricingAssessment, ThresholdChip, pricingOf } from "@/components/PricingAssessment";
 import { bandLabels, e4ToPercent, pricingSettingsAt } from "@/server/domain/pricing";
 
@@ -27,7 +28,7 @@ function monthlyEquivalent(c: { instalments: unknown[]; assessment: { inputs: un
   return c.instalments.length > 0 && c.instalments.length !== tenor;
 }
 import { UploadPanel } from "@/components/UploadPanel";
-import { AssessmentForm, BookingForm, CrmsOkay, FirstReviewApprove, GenerateOffer, ReasonButton, ReminderButton, RevealIdentifiers, TaskButton } from "./CaseClient";
+import { AssessmentForm, BookingForm, CrmsOkay, FirstReviewApprove, OfferLetterPanel, ReasonButton, ReminderButton, RevealIdentifiers, TaskButton } from "./CaseClient";
 
 type Case = Awaited<ReturnType<typeof getCase>>;
 type SP = Record<string, string | undefined>;
@@ -883,10 +884,8 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
       break;
     case "OFFER_PREPARATION": {
       const tpl = await activeTemplate(db, app.applicant_type);
-      const generated = c.documents.filter((d) => d.category === "GENERATED_OFFER");
-      const pdfs = c.documents.filter((d) => d.category === "GENERATED_OFFER_PDF");
       const signed = c.documents.filter((d) => d.category === "SIGNED_OFFER");
-      const missing = ["GENERATED_OFFER", ...PACK].filter((p) => !has(p));
+      const missing = PACK.filter((p) => !has(p));
       body.push(
         <div key="terms" className="summary-box small">
           <p className="eyebrow">Approved terms</p>
@@ -900,21 +899,35 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
           </tbody></table>
         </div>,
       );
+      const letter = await liveOfferLetter(db, app.id);
+      const pdfDoc = letter?.pdf_document_id ? c.documents.find((d) => d.id === letter.pdf_document_id) : undefined;
+      const docxDoc = letter?.docx_document_id ? c.documents.find((d) => d.id === letter.docx_document_id) : undefined;
       body.push(
-        <GenerateOffer key="g" applicationId={app.id} hasOffer={has("GENERATED_OFFER")} templateLabel={tpl ? `${tpl.name} v${tpl.version} (${tpl.format === "DOCX" ? "Word" : "HTML"})${tpl.production_approved ? "" : " · awaiting bank approval"}` : "none active for this applicant type"} />,
+        <OfferLetterPanel
+          key="letter"
+          applicationId={app.id}
+          status={letter?.status ?? "NONE"}
+          acceptance={letter?.acceptance_status ?? "NOT_ISSUED"}
+          issueNo={letter?.issue_no ?? null}
+          issuedAt={letter?.issued_at ? formatLagos(letter.issued_at) : null}
+          signedAt={letter?.signed_at ? formatLagos(letter.signed_at) : null}
+          error={letter?.last_error ?? null}
+          attempts={letter?.attempts ?? 0}
+          templateLabel={letter?.template_version ? `${tpl?.id === letter.template_id ? tpl.name : "Murabaha template"} v${letter.template_version}` : tpl ? `${tpl.name} v${tpl.version}${tpl.production_approved ? "" : " · awaiting Super Admin approval"}` : "none active for this applicant type"}
+          pdfHref={pdfDoc ? `/requests/${app.id}?tab=documents&doc=${pdfDoc.id}` : null}
+          docxHref={docxDoc ? `/requests/${app.id}?tab=documents&doc=${docxDoc.id}` : null}
+        />,
       );
-      if (generated.length || signed.length)
+      if (signed.length)
         body.push(
           <div key="versions" className="small">
-            {generated.map((d) => <div key={d.id}>Generated offer v{d.version_no} ({d.mime_type === "text/html" ? "HTML" : "Word"}) · template v{d.template_version} · {formatLagos(d.uploaded_at)}{d.superseded_at ? " · superseded" : ""}</div>)}
-            {pdfs.filter((d) => !d.superseded_at).map((d) => <div key={d.id}><Link href={`/requests/${app.id}?tab=documents&doc=${d.id}`}>Preview PDF copy v{d.version_no}</Link></div>)}
-            <div className="muted">Download the Word letter from Documents to complete case-specific lines (security, Hamish Jiddiyah %) before printing. Upload the customer-signed copy as “Signed offer letter”.</div>
             {signed.map((d) => <div key={d.id}>Signed offer v{d.version_no} · {formatLagos(d.uploaded_at)}{d.superseded_at ? " · superseded" : ""}</div>)}
           </div>,
         );
       body.push(
         <ul key="cl" className="checklist">
-          <Check ok={has("GENERATED_OFFER")}>Offer letter generated from the bank template</Check>
+          <Check ok={letter?.status === "ISSUED"}>Murabaha offer letter issued automatically</Check>
+          <Check ok={letter?.acceptance_status === "SIGNED"}>Customer-signed offer letter uploaded</Check>
           {PACK.map((p) => <Check key={p} ok={has(p)}>{CATEGORY_LABEL[p]}</Check>)}
         </ul>,
       );

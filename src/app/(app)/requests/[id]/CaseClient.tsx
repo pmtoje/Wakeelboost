@@ -1,5 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Calculator, CheckCircle2, Eye, FilePlus2, Pencil, ShieldCheck } from "lucide-react";
 import { ActionForm, FormMessages, ReasonAction, SubmitButton, type FormState } from "@/components/forms";
 import { assessmentAction, generateOfferAction, reminderAction, revealAction, taskActionAction } from "../actions";
@@ -189,20 +190,71 @@ export function CrmsOkay({ hidden, doneHref }: { hidden: Hidden; doneHref: strin
   );
 }
 
-export function GenerateOffer({ applicationId, hasOffer, templateLabel }: { applicationId: string; hasOffer: boolean; templateLabel: string }) {
+/**
+ * Murabaha offer letter status. The letter is generated automatically after Divisional Head
+ * approval; this panel shows its state and, only when generation failed, a retry.
+ */
+export function OfferLetterPanel(p: {
+  applicationId: string;
+  status: "NONE" | "PENDING" | "FAILED" | "ISSUED" | "SUPERSEDED";
+  acceptance: string;
+  issueNo: number | null;
+  issuedAt: string | null;
+  signedAt: string | null;
+  error: string | null;
+  attempts: number;
+  templateLabel: string;
+  pdfHref: string | null;
+  docxHref: string | null;
+}) {
+  const router = useRouter();
+  useEffect(() => {
+    if (p.status !== "PENDING") return;
+    const t = setInterval(() => router.refresh(), 4000);
+    return () => clearInterval(t);
+  }, [p.status, router]);
   return (
-    <ActionForm action={generateOfferAction}>
-      <input type="hidden" name="applicationId" value={applicationId} />
-      <p className="small muted" style={{ margin: 0 }}>
-        Template: {templateLabel}
-      </p>
-      <div>
-        <SubmitButton className={hasOffer ? "btn" : "btn btn-primary"}>
-          <FilePlus2 className="icon" aria-hidden="true" />
-          {hasOffer ? "Regenerate offer (new version)" : "Generate offer letter"}
-        </SubmitButton>
-      </div>
-    </ActionForm>
+    <div className="summary-box small" role="status" aria-live="polite">
+      <p className="eyebrow">Murabaha offer letter</p>
+      {p.status === "ISSUED" && (
+        <>
+          <p style={{ margin: 0 }}>
+            <CheckCircle2 className="icon" aria-hidden="true" /> <strong>Issued</strong> {p.issuedAt ? `· ${p.issuedAt}` : ""} · {p.templateLabel}
+            {p.issueNo && p.issueNo > 1 ? ` · issue ${p.issueNo}` : ""}
+          </p>
+          <p style={{ margin: "6px 0 0" }}>
+            Customer acceptance: <strong>{p.acceptance === "SIGNED" ? `Signed${p.signedAt ? ` · ${p.signedAt}` : ""}` : "Awaiting customer signature"}</strong>
+          </p>
+          <div className="row" style={{ marginTop: 8 }}>
+            {p.pdfHref && <a className="btn btn-sm" href={p.pdfHref}>View PDF</a>}
+            {p.docxHref && <a className="btn btn-sm btn-ghost" href={p.docxHref}>Word copy</a>}
+          </div>
+          {p.acceptance !== "SIGNED" && <p className="muted" style={{ margin: "8px 0 0" }}>Share the letter with the customer, then upload the signed copy as “Signed offer letter”.</p>}
+        </>
+      )}
+      {(p.status === "PENDING" || p.status === "NONE") && (
+        <p style={{ margin: 0 }}>
+          <Calculator className="icon" aria-hidden="true" /> {p.status === "PENDING" ? "Generating from the approved facility record…" : "No offer letter has been requested for this facility yet."} Template: {p.templateLabel}.
+        </p>
+      )}
+      {p.status === "FAILED" && (
+        <>
+          <p className="blocked" role="alert" style={{ margin: 0 }}>
+            <AlertTriangle className="icon" aria-hidden="true" /> Not issued. {p.error} {p.attempts > 0 ? `(${p.attempts} attempt${p.attempts === 1 ? "" : "s"})` : ""}
+          </p>
+        </>
+      )}
+      {(p.status === "FAILED" || p.status === "NONE") && (
+        <ActionForm action={generateOfferAction}>
+          <input type="hidden" name="applicationId" value={p.applicationId} />
+          <div>
+            <SubmitButton className="btn btn-sm btn-primary">
+              <FilePlus2 className="icon" aria-hidden="true" /> {p.status === "FAILED" ? "Retry generation" : "Generate now"}
+            </SubmitButton>
+          </div>
+        </ActionForm>
+      )}
+    </div>
   );
 }
 
