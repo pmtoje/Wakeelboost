@@ -85,8 +85,11 @@ async function drive(): Promise<string> {
   if (s.driveId) return (driveId = s.driveId);
   const [host, sitePath] = s.site.split(":");
   const site = (await (await graph(`/sites/${encodeURIComponent(host)}:${sitePath}`)).json()) as { id: string };
-  const drives = (await (await graph(`/sites/${encodeURIComponent(site.id)}/drives`)).json()) as { value: { id: string; name: string }[] };
-  const d = drives.value.find((x) => x.name.toLowerCase() === s.library.toLowerCase());
+  const drives = (await (await graph(`/sites/${encodeURIComponent(site.id)}/drives`)).json()) as { value: { id: string; name: string; webUrl?: string }[] };
+  // Accept the library's display name ("Documents") or the name in its web address ("Shared Documents").
+  const want = s.library.toLowerCase();
+  const urlName = (x: { webUrl?: string }) => decodeURIComponent((x.webUrl ?? "").split("/").pop() ?? "").toLowerCase();
+  const d = drives.value.find((x) => x.name.toLowerCase() === want) ?? drives.value.find((x) => urlName(x) === want);
   if (!d) throw new SharePointError(`Document library "${s.library}" was not found on the SharePoint site.`, 404);
   return (driveId = d.id);
 }
@@ -96,6 +99,39 @@ function itemPath(key: string): string {
   if (!/^[a-zA-Z0-9/_. ()-]+$/.test(key) || key.includes("..") || key.startsWith("/")) throw new Error("Invalid object key");
   const full = `${config.sharepoint.rootFolder}/${key}`.split("/").filter(Boolean);
   return full.map(encodeURIComponent).join("/");
+}
+
+/**
+ * Connection check for administrators: sign in, find the site and library, then write, read back
+ * and delete a small test file in the root folder. Returns each step's outcome; nothing is left behind.
+ */
+export async function checkSharePointConnection(): Promise<{ step: string; ok: boolean; detail: string }[]> {
+  const out: { step: string; ok: boolean; detail: string }[] = [];
+  const s = config.sharepoint;
+  const run = async (step: string, fn: () => Promise<string>) => {
+    try {
+      out.push({ step, ok: true, detail: await fn() });
+      return true;
+    } catch (e) {
+      out.push({ step, ok: false, detail: e instanceof Error ? e.message : String(e) });
+      return false;
+    }
+  };
+  token = null;
+  driveId = null;
+  if (!(await run("Sign in to Microsoft (app registration)", async () => (await accessToken(), `tenant ${s.tenantId}, app ${s.clientId}`)))) return out;
+  if (!(await run("Find the site and document library", async () => `library "${s.library}" on ${s.site || "(drive id given)"} -> drive ${await drive()}`))) return out;
+  const key = `_connection-check/check-${Date.now()}.txt`;
+  const body = Buffer.from(`WakeelBoost connection check ${new Date().toISOString()}`);
+  const store = new SharePointStore();
+  if (!(await run("Write a test file", async () => (await store.put(key, body, "text/plain"), `${s.rootFolder}/${key}`)))) return out;
+  await run("Read it back", async () => {
+    const back = await store.get(key);
+    if (!back.equals(body)) throw new Error("the file read back does not match what was written");
+    return `${back.length} bytes, identical`;
+  });
+  await run("Delete the test file", async () => (await store.delete(key), "removed"));
+  return out;
 }
 
 export class SharePointStore implements ObjectStore {

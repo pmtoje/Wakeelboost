@@ -99,3 +99,32 @@ names. Every version of a document is kept as its own file.
    `STORAGE_DRIVER` again.
 
 Each run is audited (`STORAGE_COPIED`, `STORAGE_SWITCHED`, `STORAGE_ROLLBACK`).
+
+## Connecting your folder (from its web address)
+
+Open the folder in the browser and copy its address, for example:
+
+```
+https://altbank.sharepoint.com/sites/Wakeel/Shared%20Documents/WakeelBoost
+```
+
+| Part of the address | Setting |
+| --- | --- |
+| `altbank.sharepoint.com` + `/sites/Wakeel` | `SHAREPOINT_SITE=altbank.sharepoint.com:/sites/Wakeel` |
+| `Shared%20Documents` (the library) | `SHAREPOINT_LIBRARY=Shared Documents` (or its display name, `Documents`) |
+| `WakeelBoost` (your folder; nested folders allowed, e.g. `General/WakeelBoost`) | `SHAREPOINT_ROOT_FOLDER=WakeelBoost` |
+
+The folder must be in a SharePoint site (a Teams channel's files are too). A folder in someone's
+personal OneDrive cannot be used: `Sites.Selected` covers SharePoint sites only.
+
+Then, on the WakeelBoost server: `npm run storage:check-sharepoint`. It signs in, finds the site and
+library, and writes, reads back and deletes a small test file in your folder.
+
+## Troubleshooting the connection check
+
+| Failed step | Usual cause |
+| --- | --- |
+| Sign in to Microsoft | Wrong tenant ID, client ID or secret; the secret has expired; or the server cannot reach `login.microsoftonline.com` |
+| Find the site and document library | HTTP 403: the app was not granted the site (step 4 above). HTTP 404 or "not found": `SHAREPOINT_SITE` or `SHAREPOINT_LIBRARY` does not match the address |
+| Write a test file | The app was granted `Read` instead of `Write` on the site |
+| Read it back | The server cannot reach the tenant's SharePoint host (downloads come from it) |

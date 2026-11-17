@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
 import { NAIRA } from "@/server/money";
-import { SharePointStore, setSharePointFetchForTests } from "@/server/storage/sharepoint";
+import { SharePointStore, checkSharePointConnection, setSharePointFetchForTests } from "@/server/storage/sharepoint";
 import { objectStore, setObjectStoreForTests } from "@/server/storage";
 import { readDocumentForActor, uploadDocument } from "@/server/domain/documents";
 import { liveOfferLetter, processDueOfferLetters } from "@/server/domain/offer-letters";
@@ -98,5 +98,39 @@ describe("SharePoint document store", () => {
     process.env.STORAGE_DRIVER = "sharepoint";
     delete process.env.SHAREPOINT_CLIENT_SECRET;
     expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).toThrow(/SHAREPOINT_CLIENT_SECRET|published development key|TRUSTED_PROXY_HOPS|RESEND_API_KEY/);
+  });
+
+  it("the connection check signs in, finds the library and round-trips a test file, leaving nothing behind", async () => {
+    const before = graph.files.size;
+    const steps = await checkSharePointConnection();
+    expect(steps.map((x) => x.ok)).toEqual([true, true, true, true, true]);
+    expect(graph.files.size).toBe(before);
+  });
+
+  it("finds the library by the name in its web address (Shared Documents)", async () => {
+    process.env.SHAREPOINT_LIBRARY = "Shared Documents";
+    try {
+      const steps = await checkSharePointConnection();
+      expect(steps[1]).toMatchObject({ ok: true });
+      expect(steps[1].detail).toContain("drive-1");
+    } finally {
+      delete process.env.SHAREPOINT_LIBRARY;
+    }
+  });
+
+  it("reports a wrong secret or a missing library clearly", async () => {
+    graph.rejectSignIn = true;
+    let steps = await checkSharePointConnection();
+    expect(steps).toHaveLength(1);
+    expect(steps[0].detail).toMatch(/sign-in failed \(HTTP 401\)/);
+    graph.rejectSignIn = false;
+    process.env.SHAREPOINT_LIBRARY = "Records";
+    try {
+      steps = await checkSharePointConnection();
+      expect(steps[1]).toMatchObject({ ok: false });
+      expect(steps[1].detail).toMatch(/"Records" was not found/);
+    } finally {
+      delete process.env.SHAREPOINT_LIBRARY;
+    }
   });
 });

@@ -22,7 +22,8 @@
     "directory:import": "tsx scripts/import-directory.ts",
     "setup": "tsx scripts/setup.ts",
     "security:reencrypt": "tsx scripts/reencrypt.ts",
-    "storage:copy-to-sharepoint": "tsx scripts/copy-to-sharepoint.ts"
+    "storage:copy-to-sharepoint": "tsx scripts/copy-to-sharepoint.ts",
+    "storage:check-sharepoint": "tsx scripts/check-sharepoint.ts"
   },
   "engines": {
     "node": ">=20.11"

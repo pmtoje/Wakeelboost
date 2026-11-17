@@ -6,6 +6,7 @@ export class FakeGraph {
   throttleNext = 0;
   revoked = new Set<string>();
   failPutsMatching: RegExp | null = null;
+  rejectSignIn = false;
   sessions = new Map<string, { path: string; parts: Buffer[] }>();
 
   fetch = async (input: string | URL | Request, init: RequestInit = {}): Promise<Response> => {
@@ -13,6 +14,7 @@ export class FakeGraph {
     const method = init.method ?? "GET";
     this.calls.push(`${method} ${url.replace("https://graph.microsoft.com/v1.0", "")}`);
     if (url.includes("login.microsoftonline.com")) {
+      if (this.rejectSignIn) return Response.json({ error: "invalid_client" }, { status: 401 });
       this.tokens++;
       return Response.json({ access_token: `tok-${this.tokens}`, expires_in: 3600 });
     }
@@ -32,7 +34,7 @@ export class FakeGraph {
     }
     const path = url.replace("https://graph.microsoft.com/v1.0", "");
     if (path.startsWith("/sites/") && !path.includes("/drives")) return Response.json({ id: "site-1" });
-    if (path.endsWith("/drives")) return Response.json({ value: [{ id: "drive-x", name: "Other" }, { id: "drive-1", name: "Documents" }] });
+    if (path.endsWith("/drives")) return Response.json({ value: [{ id: "drive-x", name: "Other", webUrl: "https://altbank.sharepoint.com/sites/WakeelBoost/Other" }, { id: "drive-1", name: "Documents", webUrl: "https://altbank.sharepoint.com/sites/WakeelBoost/Shared%20Documents" }] });
     const m = /^\/drives\/drive-1\/root:\/(.+?)(:\/content(\?.*)?|:\/createUploadSession)?$/.exec(path);
     if (!m) return new Response(null, { status: 400 });
     const item = decodeURIComponent(m[1]);
