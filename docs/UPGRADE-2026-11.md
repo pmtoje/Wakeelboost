@@ -67,8 +67,9 @@ not received.
    (`AltMall_ARAF_prod_Nov2026`, Alt Mall account paul.toje@altbank.ng; same team). In WakeelBoost's
    deployment settings set `SEEDFI_BASE_URL=https://loanengine.theseedfi.com` and `SEEDFI_API_KEY` to
    the value of that key, copied from ARAF's deployment settings. Do not set `SEEDFI_USERNAME` /
-   `SEEDFI_PASSWORD` (account sign-in remains available as an alternative). If the servers reach the
-   internet through an HTTP proxy, start Node with `NODE_USE_ENV_PROXY=1`. Production refuses SeedFi
+   `SEEDFI_PASSWORD` (account sign-in remains available as an alternative). Servers behind an outbound
+   proxy need nothing extra: `npm start`, `npm run worker` and `npm run dev` detect `HTTPS_PROXY` and
+   turn on Node's proxy support automatically (`scripts/with-proxy.mjs`). Production refuses SeedFi
    staging. The live connection has not been verified from this build environment (the key is held
    only in ARAF's deployment); the first real credit check, with a consenting customer, is the live test.
 2. **Credit rules**: enter the bank's approved rules.
