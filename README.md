@@ -75,7 +75,7 @@ try provisioning.
 | `npm run worker` | Background worker (outbox, weekly/monthly schedules, quarantine rescans, retention) |
 | `npm run mail:test -- you@example.com` | Send one test email through the configured transport |
 
-The test suite has 320 tests, including 48 rows recalculated from the bank's APR workbook. It covers:
+The test suite has 321 tests, including 48 rows recalculated from the bank's APR workbook. It covers:
 
 - **Routing:** boundary amounts, all three routes end to end, every endorsement path, random eligibility and separation of duties, and unstaffed stages with admin resolution.
 - **Workflow rules:** correction and rejection routing, material-change invalidation, the three-report, APR and invoice gates, the production APR block, and the pack, insurance and CRMS gates.

@@ -128,3 +128,23 @@ library, and writes, reads back and deletes a small test file in your folder.
 | Find the site and document library | HTTP 403: the app was not granted the site (step 4 above). HTTP 404 or "not found": `SHAREPOINT_SITE` or `SHAREPOINT_LIBRARY` does not match the address |
 | Write a test file | The app was granted `Read` instead of `Write` on the site |
 | Read it back | The server cannot reach the tenant's SharePoint host (downloads come from it) |
+
+## Trial: personal OneDrive folder (17 Nov 2026)
+
+For a trial, documents are stored in Paul Toje's OneDrive folder `Documents/WakeelBoost`:
+
+```
+STORAGE_DRIVER=sharepoint
+SHAREPOINT_SITE=sterlingbankng-my.sharepoint.com:/personal/paul_toje_altbank_ng
+SHAREPOINT_LIBRARY=Documents
+SHAREPOINT_ROOT_FOLDER=WakeelBoost
+```
+
+plus `SHAREPOINT_TENANT_ID`, `SHAREPOINT_CLIENT_ID` and `SHAREPOINT_CLIENT_SECRET` from the app
+registration, which still needs admin consent and Write access to this OneDrive site (grant it with
+`-Site https://sterlingbankng-my.sharepoint.com/personal/paul_toje_altbank_ng`). The server and
+`npm run storage:check-sharepoint` print a TRIAL warning while a personal OneDrive is used.
+
+Before go-live, move to a SharePoint team site: a personal OneDrive belongs to one person and is
+deleted after their account is removed. Moving later uses the same copy command with the trial as the
+source, or the admin can move the folder in SharePoint and only the settings change.

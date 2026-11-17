@@ -247,6 +247,7 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env): vo
     const missing = ["SHAREPOINT_TENANT_ID", "SHAREPOINT_CLIENT_ID", "SHAREPOINT_CLIENT_SECRET"].filter((k, i) => ![sp.tenantId, sp.clientId, sp.clientSecret][i]);
     if (!sp.site && !sp.driveId) missing.push("SHAREPOINT_SITE (or SHAREPOINT_DRIVE_ID)");
     if (missing.length) throw new Error(`STORAGE_DRIVER=sharepoint needs ${missing.join(", ")}.`);
+    if (isPersonalOneDrive(sp.site)) console.warn("[config] WARNING: documents are stored in a personal OneDrive (trial only). Move them to a SharePoint team site before relying on it: a personal OneDrive is deleted when its owner's account is removed.");
   }
   if (config.storageDriver === "local") throw new Error("Local file storage cannot be used in production: set STORAGE_DRIVER=sharepoint (or s3).");
   // Documents at rest must be encrypted (security review M10).
@@ -257,6 +258,11 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env): vo
   if (config.mailDriver === "resend" && !config.resend.apiKey) throw new Error("RESEND_API_KEY is not set: staff could not receive sign-in codes.");
   if (config.mailDriver === "resend" && !config.resend.baseUrl.startsWith("https://")) throw new Error("RESEND_BASE_URL must use https.");
   if (config.mailDriver === "smtp" && !config.smtp.host) throw new Error("SMTP_HOST is not set: staff could not receive sign-in codes.");
+}
+
+/** A personal OneDrive (host "<tenant>-my.sharepoint.com", path "/personal/<user>"), allowed as a trial only. */
+export function isPersonalOneDrive(site: string): boolean {
+  return /-my\.sharepoint\.com:\/personal\//i.test(site);
 }
 
 /** Guard used by development-only adapters. */

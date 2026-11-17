@@ -1,6 +1,6 @@
 import { loadEnv } from "./load-env";
 loadEnv();
-import { config } from "../src/server/config";
+import { config, isPersonalOneDrive } from "../src/server/config";
 import { checkSharePointConnection } from "../src/server/storage/sharepoint";
 
 /**
@@ -22,6 +22,7 @@ async function main() {
     return;
   }
   console.log(`Site: ${s.site || "(drive id)"} · library: ${s.library} · folder: ${s.rootFolder} · secret: set (${s.clientSecret.length} characters)`);
+  if (isPersonalOneDrive(s.site)) console.log("TRIAL: this is a personal OneDrive. Fine for a trial; move to a SharePoint team site before go-live (docs/SHAREPOINT.md).");
   const steps = await checkSharePointConnection();
   for (const r of steps) console.log(`${r.ok ? "OK  " : "FAIL"}  ${r.step}: ${r.detail}`);
   const ok = steps.length === 5 && steps.every((r) => r.ok);

@@ -133,4 +133,27 @@ describe("SharePoint document store", () => {
       delete process.env.SHAREPOINT_LIBRARY;
     }
   });
+
+  it("works with a personal OneDrive folder for a trial (library shown as Documents, named OneDrive)", async () => {
+    process.env.SHAREPOINT_SITE = "sterlingbankng-my.sharepoint.com:/personal/paul_toje_altbank_ng";
+    process.env.SHAREPOINT_LIBRARY = "Documents";
+    const real = graph.fetch;
+    graph.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/drives")) return Response.json({ value: [{ id: "drive-1", name: "OneDrive", webUrl: "https://sterlingbankng-my.sharepoint.com/personal/paul_toje_altbank_ng/Documents" }] });
+      return real(input, init);
+    };
+    setSharePointFetchForTests(graph.fetch as typeof fetch);
+    try {
+      const steps = await checkSharePointConnection();
+      expect(steps.map((x) => x.ok)).toEqual([true, true, true, true, true]);
+      expect(graph.calls.some((c) => c.includes("/sites/sterlingbankng-my.sharepoint.com:/personal/paul_toje_altbank_ng"))).toBe(true);
+      const { isPersonalOneDrive } = await import("@/server/config");
+      expect(isPersonalOneDrive(process.env.SHAREPOINT_SITE!)).toBe(true);
+      expect(isPersonalOneDrive("sterlingbankng.sharepoint.com:/sites/WakeelBoost")).toBe(false);
+    } finally {
+      delete process.env.SHAREPOINT_LIBRARY;
+      process.env.SHAREPOINT_SITE = SHAREPOINT_TEST_ENV.SHAREPOINT_SITE;
+    }
+  });
 });
