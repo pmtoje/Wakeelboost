@@ -81,7 +81,7 @@ export default async function GodsEye({ searchParams }: { searchParams: Promise<
         eyebrow="Management oversight"
         title="God's Eye"
         intro={<>Consolidated, read-only view of the WakeelBoost financing lifecycle. Viewing grants no authority to change, approve or disburse; act through the normal workflow where you hold that role.</>}
-        actions={<BankEndorsement height={26} />}
+        actions={<BankEndorsement height={44} />}
       />
       <form className="filters" method="get" aria-label="Filter oversight">
         <div className="field">
@@ -197,6 +197,7 @@ export default async function GodsEye({ searchParams }: { searchParams: Promise<
 
       <section aria-labelledby="q-h" className="card" style={{ marginBottom: 16 }}>
         <h2 id="q-h">Who holds what <span className="small muted">· {queue.length} open task{queue.length === 1 ? "" : "s"}, oldest first</span></h2>
+        {queue.length === 0 ? <p className="small muted">No facilities are waiting on anyone for these filters.</p> : (
         <div className="table-wrap">
           <table className="data responsive">
             <thead><tr><th>Facility</th><th>Amount</th><th>Stage and pending requirement</th><th>Held by</th><th>In queue</th><th><span className="sr-only">Open</span></th></tr></thead>
@@ -217,6 +218,7 @@ export default async function GodsEye({ searchParams }: { searchParams: Promise<
             </tbody>
           </table>
         </div>
+        )}
       </section>
 
       {isAdmin && (

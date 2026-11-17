@@ -1,7 +1,9 @@
 # WakeelBoost Work Desk
 
-Internal Alternative Bank workbench for **WakeelBoost merchant stock financing**: initiation, business
-endorsement, three credit routes, offer pack, disbursement booking, closure and repayment prompts.
+Internal Alternative Bank workbench for **WakeelBoost merchant stock financing**: mandatory SeedFi credit
+check with Product Manager review, business endorsement, three credit routes, automatic Murabaha offer
+letters, disbursement booking, closure with a per-facility ZIP archive, personal month-to-date dashboards
+and God's Eye management oversight. See [docs/UPGRADE-2026-11.md](docs/UPGRADE-2026-11.md).
 It includes OTP sign-in, case-scoped document access and an append-only audit trail.
 
 Stack: **Next.js 15 (App Router) + TypeScript**, **PostgreSQL 16** (plain SQL migrations), private
@@ -54,6 +56,7 @@ the same way once the worker sends them.
 | unit.head / div.head | Unit Head / Divisional Head |
 | do1 / do2 | Disbursement Officers 1–2 |
 | legal.officer / shariah.officer | Legal / Shariah closure reviewers |
+| pm | Product Manager (credit review queue) |
 
 The seed adds five cases at different stages, from endorsement through a fully closed booking, so every
 queue has work in it. `new.officer@altbank.ng` exists only in the bank directory, so you can use it to
@@ -72,7 +75,7 @@ try provisioning.
 | `npm run worker` | Background worker (outbox, weekly/monthly schedules, quarantine rescans, retention) |
 | `npm run mail:test -- you@example.com` | Send one test email through the configured transport |
 
-The test suite has 203 tests, including 48 rows recalculated from the bank's APR workbook. It covers:
+The test suite has 244 tests, including 48 rows recalculated from the bank's APR workbook. It covers:
 
 - **Routing:** boundary amounts, all three routes end to end, every endorsement path, random eligibility and separation of duties, and unstaffed stages with admin resolution.
 - **Workflow rules:** correction and rejection routing, material-change invalidation, the three-report, APR and invoice gates, the production APR block, and the pack, insurance and CRMS gates.

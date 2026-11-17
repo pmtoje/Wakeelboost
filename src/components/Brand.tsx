@@ -73,7 +73,7 @@ export function AuthScene({ children, theme }: { children: React.ReactNode; them
       <header className="auth-header">
         <div className="auth-brand">
           <Wordmark href="/sign-in" />
-          <BankEndorsement height={34} />
+          <BankEndorsement height={58} />
         </div>
         <ThemeToggle initial={theme} variant="pill" />
       </header>

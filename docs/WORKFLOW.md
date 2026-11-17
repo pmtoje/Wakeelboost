@@ -1,5 +1,12 @@
 # WakeelBoost workflow state map
 
+**Before the facility application (new requests):** customer identification and consent → SeedFi
+Seed Score → acceptable: facility application opens · adverse: `CREDIT_REVIEW` (Product Manager:
+clear to proceed / request clarification → `CREDIT_CLARIFICATION` (initiator responds) / decline →
+REJECTED) · technical failure: credit check unavailable, retry. Clearance permits origination only.
+After `DIVISIONAL_HEAD_REVIEW` approval the Murabaha offer letter is generated automatically; after
+`VENDOR_CONFIRMATION` the facility ZIP archive is generated automatically. See docs/UPGRADE-2026-11.md.
+
 All transitions live in `src/server/domain/workflow.ts`. Each one runs in a single PostgreSQL
 transaction that claims an idempotency key, locks the application and its open task, checks that the
 actor is the assignee **and** still holds the task's role, records the decision against the exact

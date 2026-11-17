@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="wordmark-app">WakeelBoost Work Desk</span>
           <span className="brand-bank">
             <span className="small">A platform of</span>
-            <BankLogo height={30} />
+            <BankLogo height={56} />
           </span>
         </div>
         <div className="nav-section">
@@ -121,7 +121,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <MobileNavToggle />
           <span className="mobile-only mobile-brand">
             <Wordmark href="/queue" />
-            <BankLogo height={22} />
+            <BankLogo height={32} />
           </span>
           <span className="small muted desktop-only">{ws ? `${ROLE_LABELS[ws]} workspace` : ""}</span>
         </div>
