@@ -2,12 +2,14 @@ import { mkdir, readFile, writeFile, unlink, rename } from "node:fs/promises";
 import path from "node:path";
 import { config, assertNotProduction } from "../config";
 import { encryptBlob, decryptBlob } from "../crypto";
+import { SharePointStore } from "./sharepoint";
 
 /**
  * Private object storage. Objects are never publicly addressable: every read goes through an
  * authorised application route. Two adapters:
  *   - local: AES-256-GCM encrypted files on disk (DEVELOPMENT ADAPTER, blocked in production)
  *   - s3:    private S3-compatible bucket with SSE-KMS server-side encryption
+ *   - sharepoint: the bank's SharePoint document library via Microsoft Graph (see sharepoint.ts)
  */
 export interface ObjectStore {
   readonly name: string;
@@ -21,7 +23,7 @@ class LocalEncryptedStore implements ObjectStore {
   readonly name = "local-encrypted (development adapter)";
   constructor(private root: string) {}
   private file(key: string) {
-    if (!/^[a-zA-Z0-9/_.-]+$/.test(key) || key.includes("..")) throw new Error("Invalid object key");
+    if (!/^[a-zA-Z0-9/_. ()-]+$/.test(key) || key.includes("..")) throw new Error("Invalid object key");
     return path.join(this.root, key);
   }
   async put(key: string, data: Buffer) {
@@ -108,7 +110,9 @@ class S3Store implements ObjectStore {
 let store: ObjectStore | null = null;
 export function objectStore(): ObjectStore {
   if (!store) {
-    if (config.storageDriver === "s3") {
+    if (config.storageDriver === "sharepoint") {
+      store = new SharePointStore();
+    } else if (config.storageDriver === "s3") {
       if (!config.s3.bucket) throw new Error("S3_BUCKET is required for STORAGE_DRIVER=s3");
       store = new S3Store();
     } else {

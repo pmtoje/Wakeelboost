@@ -75,7 +75,7 @@ try provisioning.
 | `npm run worker` | Background worker (outbox, weekly/monthly schedules, quarantine rescans, retention) |
 | `npm run mail:test -- you@example.com` | Send one test email through the configured transport |
 
-The test suite has 307 tests, including 48 rows recalculated from the bank's APR workbook. It covers:
+The test suite has 313 tests, including 48 rows recalculated from the bank's APR workbook. It covers:
 
 - **Routing:** boundary amounts, all three routes end to end, every endorsement path, random eligibility and separation of duties, and unstaffed stages with admin resolution.
 - **Workflow rules:** correction and rejection routing, material-change invalidation, the three-report, APR and invoice gates, the production APR block, and the pack, insurance and CRMS gates.
@@ -115,6 +115,7 @@ Set `APP_ENV=production`. Then:
 - **Serverless hosting (Vercel, Render, Railway).** The local filesystem is read-only or ephemeral, so `STORAGE_DRIVER=local` (the default) makes every upload fail with a 500. Set `STORAGE_DRIVER=s3` and a real bucket before testing uploads. The `clamd` scanner also needs a reachable host; a local `CLAMD_HOST=127.0.0.1` will leave uploads stuck in quarantine.
 - **Scanning.** Use `SCANNER_DRIVER=clamd` (or replace the adapter with the bank's scanning service). If the web node cannot reach clamd (e.g. Vercel), set `SCANNER_DRIVER=defer` there: uploads are accepted into quarantine and a worker elsewhere scans them. The worker itself must use `clamd`, never `defer`. Run `npm run rescan` to retry documents left in quarantine.
 - **Email.** Use `MAIL_DRIVER=smtp` with the bank-approved relay, or `MAIL_DRIVER=resend` with `RESEND_API_KEY` and a verified sending domain in `MAIL_FROM` (Resend and Cloudflare DNS steps in [docs/EMAIL.md](docs/EMAIL.md)). Set `CLOSURE_MAX_ATTACHMENT_BYTES` to the provider's limit; larger packs go out as an authenticated link.
+- **Documents.** Stored in the bank's SharePoint library (`STORAGE_DRIVER=sharepoint`); setup steps for the Microsoft 365 admin are in [docs/SHAREPOINT.md](docs/SHAREPOINT.md).
 - **Network.** Serve WakeelBoost only behind the bank's reverse proxy, and set `TRUSTED_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For` (at least 1; production refuses to start otherwise). The client IP used for rate limits and the audit is the entry the outermost trusted proxy appended; anything the client sends is ignored. Session cookies are always `Secure` in production.
 - **Directory.** Upload the bank's staff export at **Administration → Bank directory** (Super Admin; .xlsx or .csv with Email and Full name, optionally Department, Group mailbox, Active). Preview first, then import as *Add and update* or *Full replace* (missing people are marked inactive, never deleted). For scripted loads of a CSV, `npm run directory:import -- <file.csv> [--dry-run]` also works. Provisioning and recipient groups validate against it. Then create the first Super Admin with a one-off SQL insert; there is no public registration.
 - **Processes.** Run `npm run migrate`, then `npm run build && npm start`, and at least one `npm run worker`. Several workers are safe because they use `SKIP LOCKED` and advisory locks.

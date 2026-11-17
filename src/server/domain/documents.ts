@@ -187,6 +187,7 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
   if (!mime) throw invalid(`Unsupported or mismatched file type. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}.`);
   if (input.category === "GENERATED_OFFER" || input.category === "GENERATED_OFFER_PDF" || input.category === "FACILITY_ARCHIVE" || input.category === "SEEDFI_CREDIT_REPORT" || input.category.startsWith("PREFILLED_")) throw forbidden("Generated documents are produced by the system.");
 
+  if (!/^[0-9a-f-]{36}$/i.test(input.applicationId)) throw notFound();
   const quarantineKey = `quarantine/${input.applicationId}/${randomUUID()}`;
   try {
     await objectStore().put(quarantineKey, input.data, mime);
@@ -273,13 +274,29 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
   return { ...rec, scanStatus };
 }
 
+/**
+ * Storage path that people can browse (SharePoint): request reference, document type, then the file
+ * name with its version and a short unique id, e.g.
+ *   documents/WB-2026-001035/SIGNED_OFFER/Signed-Murabaha-offer-letter-v1-3f2a9c1e.pdf
+ * Customer names stay out of folder names.
+ */
+export async function documentStorageKey(q: Db, appId: string, category: string, filename: string, uniq: string, version?: number): Promise<string> {
+  const ref = (await q.query<{ ref: string }>("SELECT ref FROM applications WHERE id = $1", [appId])).rows[0]?.ref ?? appId;
+  const safe = filename.replace(/[^A-Za-z0-9._ ()-]+/g, "-").replace(/^[.\s-]+/, "") || "file";
+  const dot = safe.lastIndexOf(".");
+  const base = (dot > 0 ? safe.slice(0, dot) : safe).slice(0, 100).trim() || "file";
+  const ext = dot > 0 ? safe.slice(dot).slice(0, 10) : "";
+  const cat = category.replace(/[^A-Z0-9_]/g, "_");
+  return `documents/${ref.replace(/[^A-Za-z0-9-]/g, "_")}/${cat}/${base}${version ? `-v${version}` : ""}-${uniq.slice(0, 8)}${ext}`;
+}
+
 /** Store a system-generated document (offer letters). Generated content is trusted; stored directly as clean. */
 export async function storeGeneratedDocument(
   tx: Tx,
   ctx: Ctx,
   p: { appId: string; category: string; filename: string; mime: string; data: Buffer; templateId: string | null; templateVersion: number | null; role: string; stage: string; versionId: string | null; uploadedBy?: string },
 ) {
-  const key = `documents/${p.appId}/${randomUUID()}`;
+  const key = await documentStorageKey(tx, p.appId, p.category, p.filename, randomUUID());
   await objectStore().put(key, p.data, p.mime);
   return insertDocumentRow(tx, ctx, { ...p, storageKey: key, status: "CLEAN", generated: true });
 }
@@ -315,7 +332,7 @@ export async function scanDocument(ctx: Ctx, docId: string): Promise<string> {
   }
 
   if (res.clean) {
-    const key = `documents/${doc.application_id}/${doc.id}`;
+    const key = await documentStorageKey(db, doc.application_id, doc.category, doc.filename, doc.id, doc.version_no);
     await objectStore().move(doc.storage_key, key);
     await db.query("UPDATE documents SET scan_status = 'CLEAN', scan_detail = $2, storage_key = $3 WHERE id = $1", [doc.id, res.detail, key]);
   } else {

@@ -4,7 +4,7 @@ import { assertProductionConfig, config } from "@/server/config";
 
 const saved = { ...process.env };
 afterEach(() => {
-  for (const k of ["APP_ENV", "FIELD_ENCRYPTION_KEY", "APP_HMAC_KEY", "STORAGE_ENCRYPTION_KEY", "TRUSTED_PROXY_HOPS", "COOKIE_SECURE", "MAIL_DRIVER", "RESEND_API_KEY"]) {
+  for (const k of ["APP_ENV", "FIELD_ENCRYPTION_KEY", "APP_HMAC_KEY", "STORAGE_ENCRYPTION_KEY", "TRUSTED_PROXY_HOPS", "COOKIE_SECURE", "MAIL_DRIVER", "RESEND_API_KEY", "STORAGE_DRIVER", "SHAREPOINT_TENANT_ID", "SHAREPOINT_CLIENT_ID", "SHAREPOINT_CLIENT_SECRET", "SHAREPOINT_SITE"]) {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
   }
@@ -13,6 +13,12 @@ const realKeys = () => {
   process.env.FIELD_ENCRYPTION_KEY = randomBytes(32).toString("base64");
   process.env.APP_HMAC_KEY = randomBytes(32).toString("base64");
   process.env.STORAGE_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+  // Production document store: the bank's SharePoint library
+  process.env.STORAGE_DRIVER = "sharepoint";
+  process.env.SHAREPOINT_TENANT_ID = "tenant-1";
+  process.env.SHAREPOINT_CLIENT_ID = "client-1";
+  process.env.SHAREPOINT_CLIENT_SECRET = "test-only-placeholder";
+  process.env.SHAREPOINT_SITE = "altbank.sharepoint.com:/sites/WakeelBoost";
 };
 
 describe("production startup checks (security review H2)", () => {
@@ -56,5 +62,18 @@ describe("production startup checks (security review H2)", () => {
     expect(config.cookieSecure).toBe(true);
     process.env.APP_ENV = "test";
     expect(config.cookieSecure).toBe(false);
+  });
+
+  it("production refuses local file storage and incomplete SharePoint settings", () => {
+    process.env.APP_ENV = "production";
+    realKeys();
+    process.env.TRUSTED_PROXY_HOPS = "1";
+    process.env.MAIL_DRIVER = "resend";
+    process.env.RESEND_API_KEY = "re_test_placeholder";
+    expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).not.toThrow();
+    delete process.env.SHAREPOINT_SITE;
+    expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).toThrow(/SHAREPOINT_SITE/);
+    process.env.STORAGE_DRIVER = "local";
+    expect(() => assertProductionConfig({ NODE_ENV: "production", APP_ENV: "production" } as NodeJS.ProcessEnv)).toThrow(/Local file storage/);
   });
 });

@@ -90,7 +90,19 @@ export const config = {
     return str("STAFF_EMAIL_DOMAIN", "altbank.ng").toLowerCase();
   },
   get storageDriver() {
-    return str("STORAGE_DRIVER", "local") as "local" | "s3";
+    return str("STORAGE_DRIVER", "local") as "local" | "s3" | "sharepoint";
+  },
+  /** SharePoint document library (STORAGE_DRIVER=sharepoint). The client secret lives only in the deployment settings. */
+  get sharepoint() {
+    return {
+      tenantId: str("SHAREPOINT_TENANT_ID", ""),
+      clientId: str("SHAREPOINT_CLIENT_ID", ""),
+      clientSecret: str("SHAREPOINT_CLIENT_SECRET", ""),
+      site: str("SHAREPOINT_SITE", ""), // e.g. altbank.sharepoint.com:/sites/WakeelBoost
+      library: str("SHAREPOINT_LIBRARY", "Documents"),
+      driveId: str("SHAREPOINT_DRIVE_ID", ""), // optional: skips looking the library up by name
+      rootFolder: str("SHAREPOINT_ROOT_FOLDER", "WakeelBoost").replace(/^\/+|\/+$/g, ""),
+    };
   },
   get storageLocalDir() {
     return str("STORAGE_LOCAL_DIR", ".data/objects");
@@ -230,6 +242,13 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env): vo
   if (config.trustedProxyHops < 1) throw new Error("TRUSTED_PROXY_HOPS must be at least 1 in production: serve WakeelBoost only behind the bank's reverse proxy.");
   void config.previousFieldKeys;
   void config.previousStorageKeys;
+  if (config.storageDriver === "sharepoint") {
+    const sp = config.sharepoint;
+    const missing = ["SHAREPOINT_TENANT_ID", "SHAREPOINT_CLIENT_ID", "SHAREPOINT_CLIENT_SECRET"].filter((k, i) => ![sp.tenantId, sp.clientId, sp.clientSecret][i]);
+    if (!sp.site && !sp.driveId) missing.push("SHAREPOINT_SITE (or SHAREPOINT_DRIVE_ID)");
+    if (missing.length) throw new Error(`STORAGE_DRIVER=sharepoint needs ${missing.join(", ")}.`);
+  }
+  if (config.storageDriver === "local") throw new Error("Local file storage cannot be used in production: set STORAGE_DRIVER=sharepoint (or s3).");
   // Documents at rest must be encrypted (security review M10).
   if (config.storageDriver === "s3" && config.s3.serverSideEncryption === "none") throw new Error("S3_SERVER_SIDE_ENCRYPTION=none is not allowed in production: use AES256 or aws:kms.");
   if (!config.retentionPurgeEnabled) console.warn("[config] WARNING: RETENTION_PURGE_ENABLED=false. Personal data on requests past their retention date will not be purged.");
