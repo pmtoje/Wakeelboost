@@ -5,7 +5,7 @@ import { NAIRA } from "@/server/money";
 import { createDraft, saveDraft, submitApplication } from "@/server/domain/workflow";
 import { uploadDocument } from "@/server/domain/documents";
 import { readDocumentForActor } from "@/server/domain/documents";
-import { canSeeCreditDetail, classify, proceedWithReason, creditSettings, latestCreditCheck, runCreditCheck, updateCreditSettings } from "@/server/domain/credit-check";
+import { canSeeCreditDetail, classify, proceedWithReason, creditSettings, latestCreditCheck, refreshSeedfiActivation, runCreditCheck, updateCreditSettings } from "@/server/domain/credit-check";
 import { act, appRow, ctxFor, makePdf, openTaskOf, sampleData } from "@/server/demo/scenario";
 import { audits, outbox, resetDb, staffId } from "./helpers";
 import { BVN_ADVERSE, BVN_BADAUTH, BVN_DOWN, BVN_FAIR, BVN_GARBAGE, auth, calls } from "./seedfi-stub";
@@ -472,3 +472,59 @@ describe("while SeedFi is not set up", () => {
     await expect(saveDraft(rm, id, { data: {} })).rejects.toThrow(/Complete the SeedFi credit check/);
   });
 });
+
+describe("once SeedFi has been activated (security review H5)", () => {
+  async function activated(fn: () => Promise<void>) {
+    await db.query("INSERT INTO system_flags (key, set_at) VALUES ('SEEDFI_ACTIVATED', now())");
+    await refreshSeedfiActivation(db);
+    const key = process.env.SEEDFI_API_KEY;
+    delete process.env.SEEDFI_API_KEY; // SeedFi configuration lost after a redeploy
+    try {
+      await fn();
+    } finally {
+      process.env.SEEDFI_API_KEY = key;
+      await db.query("DELETE FROM system_flags");
+      await refreshSeedfiActivation(db);
+    }
+  }
+
+  it("a broken SeedFi setup keeps the check mandatory: new requests wait and Super Admins are alerted", () =>
+    activated(async () => {
+      const rm = await ctxFor("rm.ade@altbank.ng");
+      const { id } = await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+      expect((await appRow(id)).credit_check_status).toBe("REQUIRED");
+      const r = await runCreditCheck(rm, id, { firstName: "Busayo", lastName: "Okon", bvn: BVN_FAIR, dateOfBirth: "1990-01-01", gender: "female", phone: "08030000000", consent: true, consentMethod: "SIGNED_FORM" }, randomUUID());
+      expect(r.status).toBe("UNAVAILABLE");
+      await expect(saveDraft(rm, id, { data: {} })).rejects.toThrow(/Complete the SeedFi credit check/);
+      const alert = (await outbox("SECURITY_ALERT")).find((m) => /SeedFi credit checks are failing/.test(m.subject));
+      expect(alert?.to_addresses).toContain("paul.toje@altbank.ng");
+    }));
+
+  it("a production server running with live SeedFi records the activation itself, once", async () => {
+    const env = { APP_ENV: process.env.APP_ENV, SEEDFI_BASE_URL: process.env.SEEDFI_BASE_URL };
+    try {
+      expect(await refreshSeedfiActivation(db)).toBe(false); // test server: never activates
+      process.env.APP_ENV = "production";
+      process.env.SEEDFI_BASE_URL = "https://loanengine.theseedfi.com";
+      expect(await refreshSeedfiActivation(db)).toBe(true);
+      expect(await refreshSeedfiActivation(db)).toBe(true);
+      expect((await db.query("SELECT count(*)::int AS n FROM system_flags WHERE key = 'SEEDFI_ACTIVATED'")).rows[0].n).toBe(1);
+    } finally {
+      process.env.APP_ENV = env.APP_ENV;
+      process.env.SEEDFI_BASE_URL = env.SEEDFI_BASE_URL;
+      await db.query("DELETE FROM system_flags");
+      await refreshSeedfiActivation(db);
+    }
+  });
+
+  it("a draft waiting for the check is never released without one", async () => {
+    const { rm, id } = await newDraft();
+    await activated(async () => {
+      await saveDraft(rm, id, { data: {}, bvn: "22212345678" }).catch(() => undefined);
+      await expect(submitApplication(rm, id, randomUUID())).rejects.toThrow();
+      expect((await appRow(id)).credit_check_status).toBe("REQUIRED");
+      expect((await audits("CREDIT_CHECK_NOT_ACTIVE")).length).toBe(0);
+    });
+  });
+});
+

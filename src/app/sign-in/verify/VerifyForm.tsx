@@ -33,7 +33,7 @@ export function VerifyForm({ next, as, expiresAt, ttlMs }: { next: string; as: s
       <form action={action} className="auth-form">
         <input type="hidden" name="next" value={next} />
         <label htmlFor="code">One-time code</label>
-        <input id="code" name="code" className="otp-input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} required autoFocus aria-describedby="otp-feedback" aria-invalid={!!state.error} />
+        <input id="code" name="code" className="otp-input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{8,9}" maxLength={9} required autoFocus aria-describedby="otp-feedback" aria-invalid={!!state.error} />
         <fieldset className="ws-choice">
           <legend>Open workspace</legend>
           {WORKSPACES.map((w) => (

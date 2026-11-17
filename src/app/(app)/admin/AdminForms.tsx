@@ -55,6 +55,16 @@ export function StatusButton({ staffId, status }: { staffId: string; status: str
   );
 }
 
+export function UnlockSignInButton({ staffId }: { staffId: string }) {
+  return (
+    <ActionForm action={A.unlockSignInAction}>
+      <input type="hidden" name="staffId" value={staffId} />
+      <p className="small" style={{ margin: 0 }}>Sign-in is locked after repeated wrong one-time codes. Unlock only once you have confirmed with the staff member that they caused it.</p>
+      <div><SubmitButton className="btn btn-primary">Unlock sign-in</SubmitButton></div>
+    </ActionForm>
+  );
+}
+
 export function GroupMemberForm({ group }: { group: string }) {
   return (
     <ActionForm action={A.addMemberAction} resetOnSuccess>

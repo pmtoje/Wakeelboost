@@ -23,7 +23,7 @@ import { addDaysToDateString, isValidDateString, lagosDate, formatLagos } from "
 import { enqueueEmail } from "../notify/outbox";
 import { kickOfferLetter, liveOfferLetter, requestOfferLetter } from "./offer-letters";
 import { activeTemplate } from "./offer";
-import { INACTIVE_NOTE, assertCheckedIdentity, creditCheckActive, originationOpen, waitingOnInactiveCheck } from "./credit-check";
+import { INACTIVE_NOTE, assertCheckedIdentity, creditCheckRequired, originationOpen, refreshSeedfiActivation, waitingOnInactiveCheck } from "./credit-check";
 import { kickArchive, openRepository, queueArchive } from "./archive";
 import { simpleEmail, caseLink } from "../notify/templates";
 import {
@@ -195,7 +195,7 @@ export async function createDraft(ctx: Ctx, p: { initiatorRole: string; applican
       await tx.query<{ id: string }>(
         `INSERT INTO applications (ref, applicant_type, initiator_id, initiator_role, region, business_unit, status, stage, created_at, updated_at, credit_check_status, credit_check_note)
          VALUES ($1,$2,$3,$4,$5,$6,'DRAFT','DRAFT',$7,$7,$8,$9) RETURNING id`,
-        [ref, p.applicantType, actor.staffId, p.initiatorRole, ra.region, ra.business_unit, ctx.now, creditCheckActive() ? "REQUIRED" : "NOT_REQUIRED", creditCheckActive() ? null : INACTIVE_NOTE],
+        [ref, p.applicantType, actor.staffId, p.initiatorRole, ra.region, ra.business_unit, ctx.now, (await refreshSeedfiActivation(tx, ctx.now)) || creditCheckRequired() ? "REQUIRED" : "NOT_REQUIRED", creditCheckRequired() ? null : INACTIVE_NOTE],
       )
     ).rows[0];
     await tx.query(
@@ -446,6 +446,7 @@ export async function submitApplication(ctx: Ctx, appId: string, idempotencyKey:
       if (!(await holdsRole(tx, actor.staffId, app.initiator_role))) throw forbidden("Your initiator role is no longer active.");
       const parallel = (app.stage === "CREDIT_REVIEW" || app.stage === "CREDIT_CLARIFICATION") && originationOpen(app);
       if (app.stage !== "DRAFT" && !parallel) throw conflict(app.pm_hold_submitted_at ? "This request is already submitted and waiting for the Product Manager's decision." : "This request has already been submitted.");
+      await refreshSeedfiActivation(tx, ctx.now);
       if (waitingOnInactiveCheck(app)) {
         await tx.query("UPDATE applications SET credit_check_status = 'NOT_REQUIRED', credit_check_note = $2 WHERE id = $1", [app.id, "SeedFi credit check not active when this request was submitted"]);
         app.credit_check_status = "NOT_REQUIRED";

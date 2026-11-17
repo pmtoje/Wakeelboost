@@ -47,7 +47,7 @@ export function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }
 export function randomOtp(): string {
-  return randomInt(0, 1_000_000).toString().padStart(6, "0");
+  return randomInt(0, 100_000_000).toString().padStart(8, "0");
 }
 /** Cryptographically secure uniform pick. */
 export function securePick<T>(items: readonly T[]): T {

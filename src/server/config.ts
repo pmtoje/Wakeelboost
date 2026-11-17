@@ -61,6 +61,14 @@ export const config = {
   get otpMaxAttempts() {
     return int("OTP_MAX_ATTEMPTS", 5);
   },
+  /** Wrong codes, across all codes, after which an account's sign-in locks (rolling 24 hours). */
+  get otpLockFailures() {
+    return int("OTP_LOCK_FAILURES_PER_24H", 10);
+  },
+  /** Wrong codes across all accounts in an hour that trigger an alert to Super Admins. */
+  get otpGlobalAlertPerHour() {
+    return int("OTP_GLOBAL_FAILURE_ALERT_PER_HOUR", 100);
+  },
   get otpIssueLimit() {
     return int("OTP_ISSUE_LIMIT_PER_15_MIN", 5);
   },
@@ -68,7 +76,8 @@ export const config = {
     return int("TRUSTED_PROXY_HOPS", 0);
   },
   get cookieSecure() {
-    return bool("COOKIE_SECURE", false);
+    // Always HTTPS-only in production, whatever COOKIE_SECURE says.
+    return config.isProduction || bool("COOKIE_SECURE", false);
   },
   get staffEmailDomain() {
     return str("STAFF_EMAIL_DOMAIN", "altbank.ng").toLowerCase();
@@ -176,6 +185,29 @@ function keyFrom(name: string): Buffer {
   const buf = Buffer.from(raw, "base64");
   if (buf.length !== 32) throw new Error(`${name} must be 32 bytes, base64 encoded`);
   return buf;
+}
+
+/**
+ * Startup checks (security review H2). Called when the web server and the worker start; any failure
+ * stops the process, so a misconfigured production server never serves requests.
+ *  - A production build (NODE_ENV=production) must state APP_ENV explicitly: a missing APP_ENV would
+ *    otherwise default to development and switch every production safeguard off.
+ *  - With APP_ENV=production: the three keys must be real secrets (not the published dev keys), and
+ *    TRUSTED_PROXY_HOPS must be at least 1 (the app is only served behind the bank's reverse proxy,
+ *    which is the only trustworthy source of the client IP).
+ */
+export function assertProductionConfig(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV === "production" && !env.APP_ENV) {
+    throw new Error("APP_ENV is not set. Set APP_ENV=production on production servers (or APP_ENV=development for a local demo).");
+  }
+  if (!config.isProduction) {
+    if (env.NODE_ENV === "production") console.warn(`[config] WARNING: running a production build with APP_ENV=${config.appEnv}. Production safeguards are OFF. Never use this for real customer data.`);
+    return;
+  }
+  void config.fieldKey;
+  void config.hmacKey;
+  void config.storageKey;
+  if (config.trustedProxyHops < 1) throw new Error("TRUSTED_PROXY_HOPS must be at least 1 in production: serve WakeelBoost only behind the bank's reverse proxy.");
 }
 
 /** Guard used by development-only adapters. */

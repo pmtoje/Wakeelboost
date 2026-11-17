@@ -2,13 +2,14 @@ import { loadEnv } from "./load-env";
 loadEnv();
 import { workerTick } from "../src/server/jobs/worker";
 import { closePool } from "../src/server/db";
-import { config } from "../src/server/config";
+import { assertProductionConfig, config } from "../src/server/config";
 
 /**
  * Durable background worker. All state (outbox, schedule runs, digest deliveries, quarantine)
  * lives in PostgreSQL, so restarts resume safely and several workers may run concurrently.
  * Background work never touches user sessions, so it cannot reset inactivity timers.
  */
+assertProductionConfig();
 let stopping = false;
 async function main() {
   console.log(`[worker] started (poll ${config.workerPollMs}ms, env ${config.appEnv})`);

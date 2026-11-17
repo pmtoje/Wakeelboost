@@ -4,7 +4,8 @@ import { requireSuperAdmin } from "../../guard";
 import { db } from "@/server/db";
 import { ROLES, ROLE_LABELS, REGIONS, SINGLE_HOLDER_ROLES, type Role } from "@/server/domain/roles";
 import { formatLagos } from "@/server/time";
-import { GrantRoleForm, RevokeRoleButton, StatusButton } from "../../AdminForms";
+import { GrantRoleForm, RevokeRoleButton, StatusButton, UnlockSignInButton } from "../../AdminForms";
+import { isSignInLocked } from "@/server/auth/otp";
 
 export const metadata = { title: "Staff member" };
 
@@ -24,6 +25,7 @@ export default async function StaffDetail({ params, searchParams }: { params: Pr
   ).rows;
   const holders = (await db.query("SELECT role, staff_id FROM role_assignments WHERE active AND role = ANY($1::text[])", [SINGLE_HOLDER_ROLES])).rows;
   const self = id === session.staffId;
+  const locked = await isSignInLocked(s.email);
   const open = Number((await db.query("SELECT count(*) AS n FROM tasks WHERE assignee_id = $1 AND status = 'OPEN'", [id])).rows[0].n);
   return (
     <>
@@ -35,6 +37,11 @@ export default async function StaffDetail({ params, searchParams }: { params: Pr
         </div>
         {!self && <StatusButton staffId={id} status={s.status} />}
       </div>
+      {locked && !self && (
+        <div className="alert alert-warn" style={{ marginBottom: 12 }}>
+          <UnlockSignInButton staffId={id} />
+        </div>
+      )}
       {sp.created && <div className="alert alert-success" style={{ marginBottom: 12 }}>Staff provisioned. Grant roles below.</div>}
       {self && <div className="alert alert-info" style={{ marginBottom: 12 }}>You cannot change your own role assignments or status (separation of duties).</div>}
       <div className="card">

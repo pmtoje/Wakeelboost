@@ -15,6 +15,7 @@ import {
   removeGroupMember,
   revokeRole,
   setStaffStatus,
+  unlockSignIn,
   updateMonthlySchedule,
 } from "@/server/domain/admin";
 import { retryOutbox } from "@/server/jobs/outbox";
@@ -56,6 +57,7 @@ export async function provisionAction(_p: ActionState, fd: FormData): Promise<Ac
 export const grantRoleAction = async (_p: ActionState, fd: FormData) =>
   run(fd, (f, ctx) => grantRole(ctx, { staffId: s(f, "staffId"), role: s(f, "role"), region: s(f, "region") || null, businessUnit: s(f, "businessUnit") || null }), "Role granted.");
 export const revokeRoleAction = async (_p: ActionState, fd: FormData) => run(fd, (f, ctx) => revokeRole(ctx, { staffId: s(f, "staffId"), role: s(f, "role") }), "Role revoked. Any open tasks under this role were moved to Assignment exceptions.");
+export const unlockSignInAction = async (_p: ActionState, fd: FormData) => run(fd, (f, ctx) => unlockSignIn(ctx, s(f, "staffId")), "Sign-in unlocked.");
 export const statusAction = async (_p: ActionState, fd: FormData) => run(fd, (f, ctx) => setStaffStatus(ctx, s(f, "staffId"), s(f, "status") === "SUSPENDED" ? "SUSPENDED" : "ACTIVE"), "Status updated.");
 export const addMemberAction = async (_p: ActionState, fd: FormData) => run(fd, (f, ctx) => addGroupMember(ctx, s(f, "group"), s(f, "email")), "Recipient added.");
 export const removeMemberAction = async (_p: ActionState, fd: FormData) => run(fd, (f, ctx) => removeGroupMember(ctx, s(f, "group"), s(f, "email")), "Recipient removed.");

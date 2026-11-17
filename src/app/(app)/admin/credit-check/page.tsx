@@ -21,6 +21,9 @@ export default async function CreditCheckAdmin() {
     )
   ).rows;
   const lastOk = (await db.query<{ t: Date | null }>("SELECT max(responded_at) AS t FROM credit_checks WHERE status = 'COMPLETED'")).rows[0].t;
+  const flag = (await db.query<{ set_at: Date }>("SELECT set_at FROM system_flags WHERE key = 'SEEDFI_ACTIVATED'")).rows[0];
+  const activated = !!flag;
+  const activatedAt = flag?.set_at ?? null;
   return (
     <>
       <PageHeader
@@ -43,6 +46,9 @@ export default async function CreditCheckAdmin() {
         <div className="metric"><div className="k">Acceptable minimum · basis</div><div className="v">{rules.minAcceptableScore}</div><span className="small muted">{rules.scoreBasis === "LOWER_OF_BOTH" ? "Lower of overall and reviewed score" : rules.scoreBasis === "OVERALL" ? "Overall score" : "Reviewed score"}</span></div>
         <div className="metric"><div className="k">Credit history required</div><div className="v">{rules.requireCreditHistory ? "Yes" : "No"}</div><span className="small muted">rules v{rules.version}</span></div>
       </div>
+      <p className="small" style={{ margin: "0 0 12px" }}>
+        Credit check status: <strong>{activated ? `activated ${activatedAt ? formatLagos(activatedAt) : ""} · mandatory, fails closed` : "not yet activated · requests skip the check"}</strong>
+      </p>
       {s.configured && config.isProduction && s.environment !== "production" && (
         <div className="alert alert-error" role="alert" style={{ marginBottom: 16 }}>
           <span>This production server points at SeedFi <strong>staging</strong>, which returns test personas only. Credit checks are refused until <code>SEEDFI_BASE_URL</code> is set to <code>https://loanengine.theseedfi.com</code> with the live API key.</span>
@@ -51,7 +57,7 @@ export default async function CreditCheckAdmin() {
       {!s.configured && (
         <div className="alert alert-warn" style={{ marginBottom: 16 }}>
           <span>
-            Set <code>SEEDFI_BASE_URL</code> (production <code>https://loanengine.theseedfi.com</code>) and the Altmall SeedFi account sign-in, <code>SEEDFI_USERNAME</code> and <code>SEEDFI_PASSWORD</code>, in the server&apos;s secret store. The app then signs in and renews its access automatically; no API key has to be created by hand (<code>SEEDFI_API_KEY</code> remains an alternative). Credentials are never shown here, sent to browsers or logged. Until then, new requests show “Credit check unavailable” and cannot proceed.
+            Set <code>SEEDFI_BASE_URL</code> (production <code>https://loanengine.theseedfi.com</code>) and the Altmall SeedFi account sign-in, <code>SEEDFI_USERNAME</code> and <code>SEEDFI_PASSWORD</code>, in the server&apos;s secret store. The app then signs in and renews its access automatically; no API key has to be created by hand (<code>SEEDFI_API_KEY</code> remains an alternative). Credentials are never shown here, sent to browsers or logged. {activated ? <strong>SeedFi was activated earlier, so the credit check stays mandatory: new requests wait at the credit check until SeedFi works again, and Super Admins are emailed.</strong> : "Until SeedFi is first activated, requests skip the credit check. Once a production server runs with live SeedFi, the check becomes permanently mandatory and fails closed if SeedFi later stops working."}
           </span>
         </div>
       )}

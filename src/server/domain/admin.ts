@@ -77,6 +77,18 @@ export async function setStaffStatus(ctx: Ctx, staffId: string, status: "ACTIVE"
   });
 }
 
+/** Super Admin: clear a staff member's sign-in lock (after repeated wrong one-time codes). */
+export async function unlockSignIn(ctx: Ctx, staffId: string) {
+  return adminOp(ctx, "SIGNIN_UNLOCKED", async (tx) => {
+    if (staffId === ctx.actor!.staffId) throw forbidden("You cannot unlock your own sign-in.");
+    const st = (await tx.query<{ email: string }>("SELECT email FROM staff WHERE id = $1", [staffId])).rows[0];
+    if (!st) throw notFound();
+    const { clearSignInLock } = await import("../auth/otp");
+    await clearSignInLock(st.email);
+    await audit(tx, ctx, { action: "SIGNIN_UNLOCKED", actorRole: "SUPER_ADMIN", details: { staffId } });
+  });
+}
+
 async function grantRoleInTx(tx: Tx, ctx: Ctx, p: { staffId: string; role: string; region?: string | null; businessUnit?: string | null }) {
   if (!isRole(p.role)) throw invalid("Unknown role.");
   if (p.staffId === ctx.actor!.staffId) throw forbidden("Super Admins cannot change their own role assignments.");

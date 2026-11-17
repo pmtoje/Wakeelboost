@@ -5,7 +5,11 @@ import { requestOtp, verifyOtp, GENERIC_OTP_MESSAGE } from "@/server/auth/otp";
 import { lookupSession, switchWorkspace } from "@/server/auth/session";
 import { setMailTransportForTests } from "@/server/notify/transport";
 import { safeNext } from "@/lib/paths";
-import { audits, resetDb } from "./helpers";
+import { audits, outbox, resetDb, staffId } from "./helpers";
+import { clientIpFromHeaders } from "@/server/context";
+import { rateLimit } from "@/server/auth/rateLimit";
+import { unlockSignIn } from "@/server/domain/admin";
+import { ctxFor } from "@/server/demo/scenario";
 
 let sent: { to: string[]; text: string }[] = [];
 beforeEach(async () => {
@@ -21,7 +25,7 @@ beforeEach(async () => {
 });
 
 const ctxAt = (now: Date, ip = "41.58.1.1"): Ctx => ({ actor: null, now, correlationId: "c-1", ip, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile Safari/604.1" });
-const codeFrom = () => /code is: (\d{6})/.exec(sent.at(-1)!.text)![1];
+const codeFrom = () => /code is: (\d{8})/.exec(sent.at(-1)!.text)![1];
 
 async function signIn(email: string, now: Date, role?: string) {
   await requestOtp(ctxAt(now), email);
@@ -62,7 +66,7 @@ describe("OTP sign-in", () => {
     await expect(verifyOtp(ctxAt(new Date(now.getTime() + 301_000)), "co1@altbank.ng", code)).rejects.toThrow();
     await requestOtp(ctxAt(now), "co1@altbank.ng");
     const code2 = codeFrom();
-    for (let i = 0; i < 5; i++) await expect(verifyOtp(ctxAt(now), "co1@altbank.ng", "000000" === code2 ? "111111" : "000000")).rejects.toThrow();
+    for (let i = 0; i < 5; i++) await expect(verifyOtp(ctxAt(now), "co1@altbank.ng", "00000000" === code2 ? "11111111" : "00000000")).rejects.toThrow();
     await expect(verifyOtp(ctxAt(now), "co1@altbank.ng", code2)).rejects.toThrow(/invalid or has expired/);
   });
 
@@ -142,3 +146,56 @@ describe("deep links", () => {
     expect(safeNext(null)).toBe("/queue");
   });
 });
+
+describe("sign-in hardening (security review H1)", () => {
+  const wrong = (code: string) => (code === "00000000" ? "11111111" : "00000000");
+
+  it("issues 8-digit codes", async () => {
+    await requestOtp(ctxAt(new Date()), "co1@altbank.ng");
+    expect(codeFrom()).toMatch(/^\d{8}$/);
+  });
+
+  it("locks an account after 10 wrong codes across several codes, alerts Super Admins, and a Super Admin can unlock it", async () => {
+    const now = new Date();
+    for (let round = 0; round < 2; round++) {
+      await requestOtp(ctxAt(now, `10.0.0.${round}`), "co1@altbank.ng");
+      const code = codeFrom();
+      for (let i = 0; i < 5; i++) await expect(verifyOtp(ctxAt(now, `10.0.1.${i}`), "co1@altbank.ng", wrong(code))).rejects.toThrow();
+    }
+    // A new code cannot be requested, and even a correct code would be refused.
+    await expect(requestOtp(ctxAt(now), "co1@altbank.ng")).rejects.toThrow(/locked/);
+    await expect(verifyOtp(ctxAt(now), "co1@altbank.ng", "12345678")).rejects.toThrow(/locked/);
+    expect((await audits("SIGNIN_LOCKED")).length).toBe(1);
+    const alert = (await outbox("SECURITY_ALERT"))[0];
+    expect(alert.to_addresses).toContain("paul.toje@altbank.ng");
+    expect(alert.body_text).not.toContain("co1@altbank.ng"); // masked
+    // Super Admin unlocks; the staff member signs in normally.
+    await unlockSignIn(await ctxFor("superadmin@altbank.ng"), await staffId("co1@altbank.ng"));
+    const login = await signIn("co1@altbank.ng", now);
+    expect(login.token).toBeTruthy();
+    expect((await audits("SIGNIN_UNLOCKED")).length).toBe(1);
+  });
+
+  it("a staff member cannot unlock their own sign-in, and only Super Admins can unlock", async () => {
+    await expect(unlockSignIn(await ctxFor("superadmin@altbank.ng"), await staffId("superadmin@altbank.ng"))).rejects.toThrow(/own sign-in/);
+    await expect(unlockSignIn(await ctxFor("co2@altbank.ng"), await staffId("co1@altbank.ng"))).rejects.toThrow();
+  });
+
+  it("the rate limiter holds under parallel requests", async () => {
+    const now = new Date();
+    const results = await Promise.all(Array.from({ length: 12 }, () => rateLimit(db, "parallel-test", 5, 900, now)));
+    expect(results.filter(Boolean)).toHaveLength(5);
+  });
+
+  it("takes the client IP only from what the trusted proxy appended", () => {
+    const h = (xff: string | null, real: string | null = null) => (n: string) => (n === "x-forwarded-for" ? xff : n === "x-real-ip" ? real : null);
+    // Behind one proxy: the client cannot choose its address by sending its own header.
+    expect(clientIpFromHeaders(h("6.6.6.6, 41.58.1.1"), 1)).toBe("41.58.1.1");
+    expect(clientIpFromHeaders(h("6.6.6.6, 41.58.1.1, 10.0.0.2"), 2)).toBe("41.58.1.1");
+    expect(clientIpFromHeaders(h(null, "41.58.1.9"), 1)).toBe("41.58.1.9");
+    // No trusted proxy (development): X-Real-IP is never trusted.
+    expect(clientIpFromHeaders(h(null, "41.58.1.9"), 0)).toBeNull();
+    expect(clientIpFromHeaders(h("::ffff:127.0.0.1"), 0)).toBe("127.0.0.1");
+  });
+});
+

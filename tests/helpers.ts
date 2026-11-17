@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { db } from "../src/server/db";
 import { migrate } from "../src/server/migrate";
 import { seedReferenceData } from "../src/server/demo/seed";
+import { refreshSeedfiActivation } from "../src/server/domain/credit-check";
 
 /** Fresh schema + synthetic reference data for each test file. */
 export async function resetDb() {
   await migrate(process.env.DATABASE_URL!, { reset: true });
-  return seedReferenceData(db);
+  const ids = await seedReferenceData(db);
+  await refreshSeedfiActivation(db); // clears the in-memory activation flag along with the database
+  return ids;
 }
 export const key = () => randomUUID();
 export async function staffId(email: string): Promise<string> {
