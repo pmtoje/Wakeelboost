@@ -146,7 +146,8 @@ export const config = {
       configured: !!baseUrl && !!apiKey,
       environment: /\/\/loanengine\.theseedfi\.com/.test(baseUrl) ? "production" : baseUrl ? "staging" : "unconfigured",
       timeoutMs: int("SEEDFI_TIMEOUT_MS", 45_000),
-      organization: str("SEEDFI_ORGANIZATION", "Alternative Bank"),
+      // SeedFi partner organisation: WakeelBoost uses the Altmall integration (SeedFi API v2.0, April 2026).
+      organization: str("SEEDFI_ORGANIZATION", "Altmall"),
     };
   },
   get workerPollMs() {

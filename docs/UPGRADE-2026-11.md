@@ -68,7 +68,9 @@ not received.
    Per SeedFi's documentation (v2.0, §1.3, §2.5) the live environment needs SeedFi's go-live
    sign-off, and an API key is created by an authenticated account through
    `POST /auth/api/v1/keys/create` and shown **once** at creation; the document does not describe
-   keys being emailed. Ask SeedFi to confirm go-live and the procedure for the bank's live account.
+   keys being emailed. WakeelBoost uses the **Altmall** SeedFi integration (the document "SeedFi Loan
+   Engine API Documentation, prepared for Altmall Integration", v2.0): use the Altmall account's live
+   API key once SeedFi has given Altmall's go-live sign-off.
    The live connection has **not** been verified in this build (no key was available); all tests
    use a stand-in that answers in SeedFi's documented format.
 2. **Credit rules**: enter the bank's approved rules.
