@@ -36,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="nav-section">
           <span className="nav-title">Work</span>
           <NavLink href="/queue" count={queueCount} icon={<Inbox {...ic} />}>
-            My Action Queue
+            {ws === "PRODUCT_MANAGER" ? "Credit Review Queue" : "My Action Queue"}
           </NavLink>
           {isInitiatorWs && (
             <>
@@ -83,6 +83,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </NavLink>
             <NavLink href="/admin/pricing" icon={<Percent {...ic} />}>
               Pricing settings
+            </NavLink>
+            <NavLink href="/admin/credit-check" icon={<ShieldCheck {...ic} />}>
+              Credit check (SeedFi)
             </NavLink>
             <NavLink href="/admin/templates" icon={<FileText {...ic} />}>
               Offer templates

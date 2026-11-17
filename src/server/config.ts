@@ -132,6 +132,23 @@ export const config = {
   get aprCalculator() {
     return str("APR_CALCULATOR", "wakeelboost-pricing@2026.1");
   },
+  /**
+   * SeedFi Loan Engine (Seed Score). Server-side only. The API key is read from the environment or
+   * the secrets manager and is never sent to the browser, logged or stored in the database.
+   * Staging: https://stg-loan-engine.theseedfi.com · Production: https://loanengine.theseedfi.com
+   */
+  get seedfi() {
+    const baseUrl = str("SEEDFI_BASE_URL", "").replace(/\/$/, "");
+    const apiKey = str("SEEDFI_API_KEY", "");
+    return {
+      baseUrl,
+      apiKey,
+      configured: !!baseUrl && !!apiKey,
+      environment: /\/\/loanengine\.theseedfi\.com/.test(baseUrl) ? "production" : baseUrl ? "staging" : "unconfigured",
+      timeoutMs: int("SEEDFI_TIMEOUT_MS", 45_000),
+      organization: str("SEEDFI_ORGANIZATION", "Alternative Bank"),
+    };
+  },
   get workerPollMs() {
     return int("WORKER_POLL_MS", 5000);
   },

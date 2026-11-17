@@ -71,6 +71,9 @@ export interface AppRow {
   do1_id: string | null;
   do2_id: string | null;
   active_correction_id: string | null;
+  credit_check_status?: string;
+  credit_check_id?: string | null;
+  product_manager_id?: string | null;
   lock_version: number;
   created_at: Date;
   submitted_at: Date | null;
@@ -128,7 +131,11 @@ export async function assignmentSpec(tx: Tx, app: AppRow, stage: Stage): Promise
       if (zone === "SOUTH") return { roles: ["ANM_LEAD_SOUTH"], exclude: [app.initiator_id] };
       return { roles: [], exclude: [] }; // ANM without a configured state -> unstaffed
     }
+    case "CREDIT_REVIEW":
+      // Product Manager review of adverse credit findings (never the initiator).
+      return { roles: ["PRODUCT_MANAGER"], exclude: [app.initiator_id] };
     case "DRAFT":
+    case "CREDIT_CLARIFICATION":
     case "INITIATOR_CORRECTION":
     case "OFFER_PREPARATION":
     case "VENDOR_CONFIRMATION":
@@ -184,7 +191,7 @@ export async function chooseAssignee(
 ): Promise<Chosen> {
   const spec = await assignmentSpec(tx, app, stage);
   const fallbackRole = (spec.roles[0] ?? app.initiator_role) as Role;
-  if (["INITIATOR_CORRECTION", "OFFER_PREPARATION", "VENDOR_CONFIRMATION"].includes(stage)) {
+  if (["INITIATOR_CORRECTION", "CREDIT_CLARIFICATION", "OFFER_PREPARATION", "VENDOR_CONFIRMATION"].includes(stage)) {
     const pool = await eligibleStaff(tx, spec.roles, []);
     const me = pool.find((p) => p.staff_id === app.initiator_id);
     return me

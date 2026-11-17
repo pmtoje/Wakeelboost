@@ -22,6 +22,7 @@ import { formatKobo } from "../money";
 import { addDaysToDateString, isValidDateString, lagosDate, formatLagos } from "../time";
 import { enqueueEmail } from "../notify/outbox";
 import { kickOfferLetter, liveOfferLetter, requestOfferLetter } from "./offer-letters";
+import { ORIGINATION_ALLOWED, assertCheckedIdentity } from "./credit-check";
 import { simpleEmail, caseLink } from "../notify/templates";
 import {
   BVN_RE,
@@ -76,7 +77,7 @@ async function persistApp(tx: Tx, app: AppRow, now: Date) {
 function statusForStage(stage: Stage, current: string): AppRow["status"] {
   if (stage === "REJECTED") return "REJECTED";
   if (stage === "CLOSED") return "CLOSED";
-  if (stage === "DRAFT") return "DRAFT";
+  if (stage === "DRAFT" || stage === "CREDIT_REVIEW" || stage === "CREDIT_CLARIFICATION") return "DRAFT";
   if (current === "BOOKED") return "BOOKED";
   return "IN_PROGRESS";
 }
@@ -190,8 +191,8 @@ export async function createDraft(ctx: Ctx, p: { initiatorRole: string; applican
     const ref = `WB-${lagosDate(ctx.now).slice(0, 4)}-${String(seq).padStart(6, "0")}`;
     const app = (
       await tx.query<{ id: string }>(
-        `INSERT INTO applications (ref, applicant_type, initiator_id, initiator_role, region, business_unit, status, stage, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'DRAFT','DRAFT',$7,$7) RETURNING id`,
+        `INSERT INTO applications (ref, applicant_type, initiator_id, initiator_role, region, business_unit, status, stage, created_at, updated_at, credit_check_status, credit_check_note)
+         VALUES ($1,$2,$3,$4,$5,$6,'DRAFT','DRAFT',$7,$7,'REQUIRED',NULL) RETURNING id`,
         [ref, p.applicantType, actor.staffId, p.initiatorRole, ra.region, ra.business_unit, ctx.now],
       )
     ).rows[0];
@@ -246,7 +247,10 @@ async function assertCanEdit(tx: Tx, ctx: Ctx, app: AppRow) {
   const actor = ctx.actor!;
   if (app.initiator_id !== actor.staffId) throw forbidden("Only the initiator can edit this request.");
   if (!(await holdsRole(tx, actor.staffId, app.initiator_role))) throw forbidden("Your initiator role is no longer active.");
-  if (app.stage === "DRAFT") return;
+  if (app.stage === "DRAFT") {
+    if (!ORIGINATION_ALLOWED.includes(app.credit_check_status ?? "NOT_REQUIRED")) throw gate("Complete the SeedFi credit check before entering the facility details.");
+    return;
+  }
   if (app.stage === "INITIATOR_CORRECTION") {
     const t = (await tx.query("SELECT * FROM tasks WHERE application_id = $1 AND status = 'OPEN'", [app.id])).rows[0];
     if (t && t.assignee_id === actor.staffId) return;
@@ -377,6 +381,7 @@ async function finaliseVersionForSubmission(tx: Tx, ctx: Ctx, app: AppRow): Prom
     if (!(await holdsRole(tx, version.data.rbeId, "RBE")) || version.data.rbeId === app.initiator_id) errors.rbeId = "Select an active Regional Business Executive.";
   }
   if (Object.keys(errors).length) throw invalid("The request is incomplete. Fix the highlighted items and submit again.", errors);
+  await assertCheckedIdentity(tx, { id: app.id, applicant_type: app.applicant_type, credit_check_status: app.credit_check_status ?? "NOT_REQUIRED", credit_check_id: app.credit_check_id ?? null }, version);
 
   const digest = materialDigest({
     type: app.applicant_type,
@@ -519,6 +524,55 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
   if (a === "REJECT") return reject(tx, ctx, app, task, reason!);
 
   switch (task.stage) {
+    case "CREDIT_REVIEW": {
+      // Product Manager decision on adverse SeedFi findings. Clearance permits origination only;
+      // the facility still needs every credit approval.
+      await recordDecision(tx, ctx, app, task, a, reason);
+      await completeTask(tx, ctx, task, a);
+      app.product_manager_id = ctx.actor!.staffId;
+      if (a === "DECLINE") {
+        await tx.query("UPDATE applications SET credit_check_status = 'DECLINED', product_manager_id = $2 WHERE id = $1", [app.id, ctx.actor!.staffId]);
+        await audit(tx, ctx, { action: "CREDIT_REVIEW_DECLINED", actorRole: task.assignee_role, applicationId: app.id, stage: task.stage, reason });
+        await closeDeclined(tx, ctx, app, task, reason!);
+        return "Declined. The request is closed and the initiator has been notified.";
+      }
+      if (a === "REQUEST_CLARIFICATION") {
+        await tx.query("UPDATE applications SET credit_check_status = 'CLARIFICATION_REQUIRED', product_manager_id = $2 WHERE id = $1", [app.id, ctx.actor!.staffId]);
+        await audit(tx, ctx, { action: "CREDIT_CLARIFICATION_REQUESTED", actorRole: task.assignee_role, applicationId: app.id, stage: task.stage, reason });
+        const chosen = await chooseAssignee(tx, app, "CREDIT_CLARIFICATION");
+        await moveTo(tx, ctx, app, "CREDIT_CLARIFICATION", chosen, reason ?? undefined);
+        return "Clarification requested from the initiator.";
+      }
+      await tx.query("UPDATE applications SET credit_check_status = 'CLEARED', product_manager_id = $2 WHERE id = $1", [app.id, ctx.actor!.staffId]);
+      await audit(tx, ctx, { action: "CREDIT_REVIEW_CLEARED", actorRole: task.assignee_role, applicationId: app.id, stage: task.stage, reason });
+      await moveTo(tx, ctx, app, "DRAFT", null);
+      const email = await staffEmail(tx, app.initiator_id);
+      if (email) {
+        await enqueueEmail(tx, ctx.now, {
+          kind: "CREDIT_REVIEW_CLEARED",
+          dedupeKey: `credit-cleared:${task.id}`,
+          applicationId: app.id,
+          to: [email],
+          subject: `WakeelBoost ${app.ref}: cleared to proceed after credit review`,
+          text: simpleEmail([
+            `The Product Manager cleared ${app.ref} (${app.customer_name}) to proceed after reviewing the SeedFi findings.`,
+            `Reason: ${reason}`,
+            "Complete the facility application and submit it. This is not credit approval: the request still goes through every credit approval stage.",
+            `Open the request: ${caseLink(app.id)}`,
+          ]),
+        });
+      }
+      return "Cleared to proceed. The initiator can now complete the facility application.";
+    }
+    case "CREDIT_CLARIFICATION": {
+      await recordDecision(tx, ctx, app, task, a, reason);
+      await completeTask(tx, ctx, task, a);
+      await tx.query("UPDATE applications SET credit_check_status = 'REVIEW_REQUIRED' WHERE id = $1", [app.id]);
+      await audit(tx, ctx, { action: "CREDIT_CLARIFICATION_PROVIDED", actorRole: task.assignee_role, applicationId: app.id, stage: task.stage, reason });
+      const chosen = await chooseAssignee(tx, app, "CREDIT_REVIEW", { preferred: app.product_manager_id ?? null });
+      await moveTo(tx, ctx, app, "CREDIT_REVIEW", chosen, `Clarification: ${reason}`);
+      return "Clarification sent to the Product Manager.";
+    }
     case "BUSINESS_ENDORSEMENT": {
       if (a === "RETURN") return returnToInitiator(tx, ctx, app, task, reason!);
       const route = routeForAmount(Number(app.requested_amount_kobo));
@@ -726,6 +780,30 @@ async function involvedCo3(tx: Tx, app: AppRow): Promise<string | null> {
     if (id && (await holdsRole(tx, id, "CREDIT_OFFICER_3"))) return id;
   }
   return null;
+}
+
+/** Product Manager decline: the request is closed (status REJECTED, credit status DECLINED). */
+async function closeDeclined(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, reason: string) {
+  await tx.query("UPDATE applications SET rejected_at=$2, retention_until=$3 WHERE id=$1", [app.id, ctx.now, retentionDate(ctx.now)]);
+  await moveTo(tx, ctx, app, "REJECTED", null);
+  const email = await staffEmail(tx, app.initiator_id);
+  if (email) {
+    await enqueueEmail(tx, ctx.now, {
+      kind: "CREDIT_DECLINED",
+      dedupeKey: `credit-declined:${app.id}`,
+      applicationId: app.id,
+      to: [email],
+      subject: `WakeelBoost ${app.ref}: declined after credit review`,
+      text: simpleEmail([
+        `Request ${app.ref} (${app.customer_name}) was declined by the Product Manager after reviewing the SeedFi credit findings.`,
+        `Reason: ${reason}`,
+        `Decision time: ${formatLagos(ctx.now)}`,
+        "",
+        `View the request: ${caseLink(app.id)}`,
+      ]),
+    });
+  }
+  void task;
 }
 
 async function reject(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, reason: string): Promise<string> {

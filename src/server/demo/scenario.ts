@@ -9,6 +9,9 @@ import { createDraft, saveDraft, submitApplication, performTaskAction, type Task
 import { uploadDocument } from "../domain/documents";
 import { recordAssessment } from "../domain/assessment";
 import { generateOffer } from "../domain/offer";
+import { runCreditCheck } from "../domain/credit-check";
+import { seedfiTransportIsStub } from "../integrations/seedfi";
+import { config } from "../config";
 import type { ApplicantType } from "../domain/application-data";
 import { addDaysToDateString, lagosDate } from "../time";
 import type { Stage } from "../domain/stages";
@@ -117,6 +120,7 @@ export async function createSubmittedCase(opts: {
   const ctx = await ctxFor(email, now);
   const type = opts.type ?? "INDIVIDUAL";
   const { id } = await createDraft(ctx, { initiatorRole: role, applicantType: type });
+  await passCreditCheck(ctx, id, type === "LIMITED" ? "22200000001" : "22212345678", now);
   const rbe = role === "RM" ? (await db.query("SELECT id FROM staff WHERE email = $1", [opts.rbeEmail ?? "rbe.lagos@altbank.ng"])).rows[0].id : null;
   await saveDraft(ctx, id, {
     data: { ...sampleData(type, opts.amountKobo, now), rbeId: rbe },
@@ -128,6 +132,22 @@ export async function createSubmittedCase(opts: {
   for (const c of cats) await uploadDocument(ctx, { applicationId: id, category: c, filename: `${c.toLowerCase()}.pdf`, data: makePdf(`${c} synthetic`) });
   await submitApplication(ctx, id, randomUUID());
   return id;
+}
+
+/**
+ * Credit check for synthetic cases. With a SeedFi transport configured (tests use a stand-in that
+ * answers in SeedFi's documented format) the real workflow runs. Without SeedFi (local demo seed)
+ * synthetic cases are marked as not checked; this is refused in production.
+ */
+export async function passCreditCheck(ctx: Ctx, appId: string, bvn: string, now = new Date()) {
+  if (seedfiTransportIsStub() || config.seedfi.configured) {
+    const r = await runCreditCheck(ctx, appId, { firstName: "Halima", lastName: "Yusuf", bvn, dateOfBirth: "1988-04-12", gender: "female", phone: "08030000000", consent: true, consentMethod: "SIGNED_FORM" }, randomUUID());
+    return r.status;
+  }
+  if (config.isProduction) throw new Error("Synthetic cases cannot skip the credit check in production.");
+  await db.query("UPDATE applications SET credit_check_status = 'NOT_REQUIRED', credit_check_note = 'Synthetic demo case: SeedFi not configured, credit check not run' WHERE id = $1", [appId]);
+  void now;
+  return "NOT_REQUIRED";
 }
 
 /** First reviewer: three credit reports + assessment. */

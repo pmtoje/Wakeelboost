@@ -21,6 +21,7 @@ import { retryOutbox } from "@/server/jobs/outbox";
 import { auditOutsideTx } from "@/server/audit";
 import { updatePricingSettings } from "@/server/domain/pricing";
 import { updateSecondSignatory } from "@/server/domain/signatory";
+import { updateCreditSettings } from "@/server/domain/credit-check";
 import { importDirectory } from "@/server/domain/directory";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -133,6 +134,16 @@ export async function directoryImportAction(_p: ActionState, fd: FormData): Prom
       message: summary.applied ? `Directory imported: ${summary.added} added, ${summary.updated} updated, ${summary.deactivated} deactivated.` : "Preview ready. Nothing has been saved yet.",
       nonce: Date.now(),
     };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function creditRulesAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx } = await requireUser();
+  try {
+    await updateCreditSettings(ctx, { minAcceptableScore: Number(s(fd, "minAcceptableScore")), scoreBasis: s(fd, "scoreBasis"), requireCreditHistory: fd.get("requireCreditHistory") === "on", reason: s(fd, "reason") });
+    return { ok: true, message: "Credit rules saved. They apply to new credit checks; earlier results keep the rules version they were classified with.", nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
   }

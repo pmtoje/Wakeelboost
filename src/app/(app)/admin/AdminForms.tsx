@@ -217,3 +217,38 @@ export function SignatoryForm({ current }: { current: { name: string; title: str
     </ActionForm>
   );
 }
+
+export function CreditRulesForm({ current }: { current: { minAcceptableScore: number; scoreBasis: string; requireCreditHistory: boolean } }) {
+  return (
+    <ActionForm action={A.creditRulesAction}>
+      {(st) => (
+        <>
+          <div className="grid-3">
+            <div className="field">
+              <label htmlFor="cr-min">Minimum acceptable Seed Score (280–800)</label>
+              <input id="cr-min" name="minAcceptableScore" type="number" min={280} max={800} defaultValue={current.minAcceptableScore} required />
+              {st.fields?.minAcceptableScore && <span className="err">{st.fields.minAcceptableScore}</span>}
+            </div>
+            <div className="field">
+              <label htmlFor="cr-basis">Score compared</label>
+              <select id="cr-basis" name="scoreBasis" defaultValue={current.scoreBasis}>
+                <option value="LOWER_OF_BOTH">Lower of overall and reviewed score</option>
+                <option value="REVIEWED">Reviewed score</option>
+                <option value="OVERALL">Overall score</option>
+              </select>
+            </div>
+            <label className="check" style={{ alignSelf: "end" }}>
+              <input type="checkbox" name="requireCreditHistory" defaultChecked={current.requireCreditHistory} /> Refer customers with no credit history
+            </label>
+          </div>
+          <div className="field">
+            <label htmlFor="cr-reason">Reason for the change</label>
+            <input id="cr-reason" name="reason" required minLength={5} placeholder="e.g. Credit policy circular reference" />
+            {st.fields?.reason && <span className="err">{st.fields.reason}</span>}
+          </div>
+          <div><SubmitButton>Save new rules version</SubmitButton></div>
+        </>
+      )}
+    </ActionForm>
+  );
+}

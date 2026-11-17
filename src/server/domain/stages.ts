@@ -2,6 +2,8 @@ import type { Role } from "./roles";
 
 export const STAGES = [
   "DRAFT",
+  "CREDIT_REVIEW",
+  "CREDIT_CLARIFICATION",
   "BUSINESS_ENDORSEMENT",
   "INITIATOR_CORRECTION",
   "FIRST_CREDIT_REVIEW",
@@ -23,6 +25,8 @@ export type Stage = (typeof STAGES)[number];
 
 export const STAGE_LABELS: Record<Stage, string> = {
   DRAFT: "Draft",
+  CREDIT_REVIEW: "Product Manager credit review",
+  CREDIT_CLARIFICATION: "Credit check clarification (initiator)",
   BUSINESS_ENDORSEMENT: "Business endorsement",
   INITIATOR_CORRECTION: "Correction by initiator",
   FIRST_CREDIT_REVIEW: "First credit review",
@@ -43,6 +47,8 @@ export const STAGE_LABELS: Record<Stage, string> = {
 
 export const REQUIRED_ACTION: Record<Stage, string> = {
   DRAFT: "Complete and submit request",
+  CREDIT_REVIEW: "Review the SeedFi findings: clear to proceed, request clarification or decline",
+  CREDIT_CLARIFICATION: "Provide the clarification the Product Manager requested",
   BUSINESS_ENDORSEMENT: "Endorse, reject or return the request",
   INITIATOR_CORRECTION: "Correct and resubmit the request",
   FIRST_CREDIT_REVIEW: "Upload 3 credit reports, complete APR/DSR, log invoice and decide",
@@ -85,7 +91,11 @@ export type TaskAction =
   | "SEND_FOR_CORRECTION"
   | "DISBURSED"
   | "COMPLETE_PROCESS"
-  | "CONFIRM_VENDOR_PAYMENT";
+  | "CONFIRM_VENDOR_PAYMENT"
+  | "CLEAR_TO_PROCEED"
+  | "REQUEST_CLARIFICATION"
+  | "DECLINE"
+  | "RESPOND_CLARIFICATION";
 
 export const ACTION_LABELS: Record<TaskAction, string> = {
   ENDORSE: "Endorse",
@@ -102,14 +112,22 @@ export const ACTION_LABELS: Record<TaskAction, string> = {
   DISBURSED: "Disbursed",
   COMPLETE_PROCESS: "Complete Process",
   CONFIRM_VENDOR_PAYMENT: "Confirm vendor payment and end of process",
+  CLEAR_TO_PROCEED: "Clear to proceed",
+  REQUEST_CLARIFICATION: "Request clarification",
+  DECLINE: "Decline",
+  RESPOND_CLARIFICATION: "Send clarification",
 };
 
 /** Actions requiring a reason. */
-export const REASON_REQUIRED: readonly TaskAction[] = ["REJECT", "RETURN", "REQUEST_INITIATOR", "SEND_FOR_CORRECTION"];
+export const REASON_REQUIRED: readonly TaskAction[] = ["REJECT", "RETURN", "REQUEST_INITIATOR", "SEND_FOR_CORRECTION", "CLEAR_TO_PROCEED", "REQUEST_CLARIFICATION", "DECLINE", "RESPOND_CLARIFICATION"];
 
 /** Allowed actions per stage. Second review depends on the route (Proceed/Reject for routes 2 and 3). */
 export function allowedActions(stage: Stage, route: number | null): TaskAction[] {
   switch (stage) {
+    case "CREDIT_REVIEW":
+      return ["CLEAR_TO_PROCEED", "REQUEST_CLARIFICATION", "DECLINE"];
+    case "CREDIT_CLARIFICATION":
+      return ["RESPOND_CLARIFICATION"];
     case "BUSINESS_ENDORSEMENT":
       return ["ENDORSE", "REJECT", "RETURN"];
     case "INITIATOR_CORRECTION":

@@ -9,7 +9,7 @@ import { uploadDocument } from "@/server/domain/documents";
 import { updateSecondSignatory } from "@/server/domain/signatory";
 import { listDocuments, readDocumentForActor } from "@/server/domain/documents";
 import JSZip from "jszip";
-import { ACCEPTANCE_INPUTS, act, appRow, approveFirstReview, createSubmittedCase, ctxFor, driveToOffer, makePdf, openTaskOf, preparePack, recordAcceptanceAssessment, prepareFirstReview } from "@/server/demo/scenario";
+import { ACCEPTANCE_INPUTS, act, appRow, approveFirstReview, createSubmittedCase, ctxFor, driveToOffer, makePdf, openTaskOf, passCreditCheck, preparePack, recordAcceptanceAssessment, prepareFirstReview } from "@/server/demo/scenario";
 import { audits, key, outbox, resetDb } from "./helpers";
 
 const S: PricingSettings = { id: "s1", version: 2, maxTenorMonths: 6, shortRateE4: 100_000, longRateE4: 150_000, thresholdE4: 100_000, longBandFromMonths: 4, effectiveFrom: new Date("2020-01-01") };
@@ -239,6 +239,7 @@ describe("Super Admin pricing settings", () => {
     await updatePricingSettings(sa, { maxTenorMonths: 4, shortRatePercent: "10", longRatePercent: "15", reason: "Shorter maximum" });
     const rm = await ctxFor("rm.ade@altbank.ng");
     const { id } = await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    await passCreditCheck(rm, id, "22212345678");
     await saveDraft(rm, id, { data: { tenorMonths: 6 } });
     const err = await submitApplication(rm, id, key()).catch((e) => e);
     expect(err.fields.tenorMonths).toMatch(/from 1 to 4/);

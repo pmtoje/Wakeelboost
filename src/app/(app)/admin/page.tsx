@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookUser, Percent, CalendarClock, FileText, History, Mail, Route, Users, UsersRound } from "lucide-react";
+import { BookUser, Percent, CalendarClock, FileText, History, Mail, Route, Users, UsersRound, ShieldCheck } from "lucide-react";
 import { requireSuperAdmin } from "./guard";
 import { db } from "@/server/db";
 import { PageHeader } from "@/components/PageHeader";
@@ -31,6 +31,7 @@ export default async function AdminHome() {
     { href: "/admin/groups", icon: UsersRound, title: "Closure recipients", body: `${members} approved Legal and Shariah Compliance recipient(s).` },
     { href: "/admin/templates", icon: FileText, title: "Offer templates", body: tpl ? `Active: ${tpl.name} v${tpl.version}${tpl.production_approved ? " (bank-approved)" : " (not bank-approved)"}.` : "No active template." },
     { href: "/admin/pricing", icon: Percent, title: "Pricing settings", body: "Flat markup rates by tenor band and the maximum tenor (≤ 6 months), with change history." },
+    { href: "/admin/credit-check", icon: ShieldCheck, title: "Credit check (SeedFi)", body: "SeedFi connection status, recent enquiries and the rules that refer adverse results to the Product Manager." },
     { href: "/admin/schedules", icon: CalendarClock, title: "Scheduled emails", body: "Weekly initiator digest and monthly leads summary." },
     { href: "/admin/outbox", icon: Mail, title: "Email delivery", body: dead ? `${dead} message(s) failed or awaiting retry.` : "All recent messages delivered or queued." },
     { href: "/admin/audit", icon: History, title: "Audit trail", body: "System-wide, per-request and per-customer audit with IP and device." },

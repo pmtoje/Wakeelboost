@@ -43,6 +43,8 @@ export const PACK = ["SIGNED_OFFER", "KYC", "PRE_DISBURSEMENT", "GSI_FORM", "INS
 /** Which categories the current task holder may upload at each stage. */
 export const UPLOADABLE_BY_STAGE: Partial<Record<Stage, string[]>> = {
   DRAFT: INITIAL,
+  CREDIT_REVIEW: ["SUPPORTING"],
+  CREDIT_CLARIFICATION: ["BANK_STATEMENT", "CONSENT_FORM", "SUPPORTING"],
   INITIATOR_CORRECTION: INITIAL,
   FIRST_CREDIT_REVIEW: ["CREDIT_REPORT", "DSR_EXCEPTION_EVIDENCE", "SUPPORTING"],
   CREDIT_CORRECTION: ["CREDIT_REPORT", "DSR_EXCEPTION_EVIDENCE", "SUPPORTING"],
@@ -194,7 +196,8 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
       let role: string | null = null;
       let allowed: string[] = [];
       if (app.stage === "DRAFT" && app.initiator_id === actor.staffId) {
-        allowed = UPLOADABLE_BY_STAGE.DRAFT!;
+        // Until the credit check clears, only the customer's consent form can be attached.
+        allowed = ["NOT_REQUIRED", "ACCEPTABLE", "CLEARED"].includes(app.credit_check_status) ? UPLOADABLE_BY_STAGE.DRAFT! : ["CONSENT_FORM"];
         role = app.initiator_role;
       } else if (task && task.assignee_id === actor.staffId) {
         allowed = UPLOADABLE_BY_STAGE[task.stage as Stage] ?? [];

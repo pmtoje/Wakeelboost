@@ -7,6 +7,7 @@ import { uploadDocument } from "@/server/domain/documents";
 import { parseCalculatorForm, recordAssessment } from "@/server/domain/assessment";
 import { generateOffer } from "@/server/domain/offer";
 import { revealIdentifiers } from "@/server/domain/views";
+import { runCreditCheck } from "@/server/domain/credit-check";
 import { invalid } from "@/server/errors";
 import { parseNairaToKobo } from "@/server/money";
 import type { TaskAction } from "@/server/domain/stages";
@@ -22,7 +23,7 @@ export async function createDraftAction(_p: ActionState, fd: FormData): Promise<
   } catch (e) {
     return toActionError(e);
   }
-  redirect(`/requests/${id}/edit`);
+  redirect(`/requests/${id}/credit-check`);
 }
 
 interface DraftPayload {
@@ -169,6 +170,32 @@ export async function revealAction(_p: ActionState, fd: FormData): Promise<Actio
   try {
     const data = await revealIdentifiers(ctx, str(fd, "applicationId"));
     return { ok: true, data, nonce: Date.now() };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Initiator: customer identification + consent, then the SeedFi credit check. */
+export async function creditCheckAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx } = await requireUser();
+  const appId = str(fd, "applicationId");
+  try {
+    const r = await runCreditCheck(
+      ctx,
+      appId,
+      {
+        firstName: str(fd, "firstName"),
+        lastName: str(fd, "lastName"),
+        bvn: str(fd, "bvn"),
+        dateOfBirth: str(fd, "dateOfBirth"),
+        gender: str(fd, "gender"),
+        phone: str(fd, "phone"),
+        consent: fd.get("consent") === "on",
+        consentMethod: str(fd, "consentMethod"),
+      },
+      str(fd, "idempotencyKey"),
+    );
+    return r.status === "UNAVAILABLE" ? { ok: false, error: r.message, nonce: Date.now() } : { ok: true, message: r.message, nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
   }

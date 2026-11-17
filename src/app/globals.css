@@ -392,3 +392,21 @@ dialog.modal::backdrop { background: rgb(0 0 0 / 60%); }
 .type-card input:checked + .choice { border-color: var(--yellow); box-shadow: inset 0 0 0 1px var(--yellow); background: var(--accent-soft); }
 .type-card input:focus-visible + .choice { outline: 2px solid var(--focus); outline-offset: 2px; }
 .metric .badge { white-space: normal; line-height: 1.3; margin-top: 4px; }
+
+/* Credit check journey and result */
+.journey { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 var(--space-4); counter-reset: j; }
+.journey li { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--muted); }
+.journey li.done { color: var(--ink-2); }
+.journey li.current { border-color: var(--yellow); color: var(--ink); font-weight: 700; }
+.journey-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); font-size: 12px; font-weight: 700; }
+.journey li.current .journey-n { background: var(--yellow); color: var(--graphite); }
+.journey li.done .journey-n svg.icon { width: 14px; height: 14px; }
+.credit-result { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.credit-col { min-width: 0; }
+.credit-outcome { grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 14px; }
+.credit-outcome.ok { background: var(--success-bg); color: var(--success); }
+.credit-outcome.adverse { background: var(--warn-bg); color: var(--warn); }
+.credit-outcome span { color: var(--ink); }
+@media (max-width: 760px) { .credit-result { grid-template-columns: 1fr; } }
+.consent-box { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: var(--space-3); margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.consent-box legend { font-weight: 700; font-size: 13px; padding: 0 6px; }

@@ -47,6 +47,7 @@ export const DEMO_STAFF: DemoStaff[] = [
   { email: "do2@altbank.ng", name: "Mary Disburse-Two", roles: [{ role: "DISBURSEMENT_OFFICER_2" }], unit: "Operations" },
   { email: "legal.officer@altbank.ng", name: "Lanre Legal", roles: [{ role: "LEGAL_REVIEWER" }], unit: "Legal" },
   { email: "shariah.officer@altbank.ng", name: "Aisha Shariah", roles: [{ role: "SHARIAH_REVIEWER" }], unit: "Shariah Compliance" },
+  { email: "pm@altbank.ng", name: "Tola Product-Manager", roles: [{ role: "PRODUCT_MANAGER" }], unit: "DBC Products" },
 ];
 
 /** Group mailboxes that are always seeded (the closure workflow needs them). */

@@ -5,6 +5,7 @@ import { auditOutsideTx } from "../audit";
 import { decryptField } from "../crypto";
 import { forbidden, notFound } from "../errors";
 import { maskWithLast4 } from "../mask";
+import { canSeeCreditDetail, creditResponseDetail, latestCreditCheck } from "./credit-check";
 import { caseAccess } from "./access";
 import { latestAssessment } from "./assessment";
 import { listDocuments } from "./documents";
@@ -96,7 +97,7 @@ export async function actionQueue(q: Db, staffId: string, query: QueueQuery) {
 export async function initiatorRequests(q: Db, staffId: string) {
   return (
     await q.query(
-      `SELECT a.id, a.ref, a.customer_name, a.requested_amount_kobo, a.stage, a.status, a.route, a.applicant_type, a.created_at, a.submitted_at, a.updated_at,
+      `SELECT a.id, a.ref, a.customer_name, a.requested_amount_kobo, a.stage, a.status, a.credit_check_status, a.route, a.applicant_type, a.created_at, a.submitted_at, a.updated_at,
               t.id AS task_id, t.assigned_at, t.entered_at, s.full_name AS owner_name, t.assignee_role AS owner_role, t.assignee_id AS owner_id
          FROM applications a
          LEFT JOIN tasks t ON t.application_id = a.id AND t.status = 'OPEN'
@@ -187,13 +188,16 @@ export async function getCase(ctx: Ctx, appId: string) {
   const people = (
     await db.query(
       `SELECT id, full_name, email FROM staff WHERE id = ANY($1::uuid[])`,
-      [[app.initiator_id, app.endorser_id, app.first_reviewer_id, app.second_reviewer_id, app.pack_co3_id, app.do1_id, app.do2_id, app.selected_rbe_id, app.vendor_confirmed_by, app.process_completed_by].filter(Boolean)],
+      [[app.initiator_id, app.product_manager_id, app.endorser_id, app.first_reviewer_id, app.second_reviewer_id, app.pack_co3_id, app.do1_id, app.do2_id, app.selected_rbe_id, app.vendor_confirmed_by, app.process_completed_by].filter(Boolean)],
     )
   ).rows;
   const openTask = tasks.find((t: { status: string }) => t.status === "OPEN") ?? null;
+  const creditCheck = app.credit_check_status === "NOT_REQUIRED" ? null : await latestCreditCheck(db, appId);
+  const creditDetail = creditCheck ? await canSeeCreditDetail(db, actor.staffId, appId) : false;
   await auditOutsideTx(ctx, { action: "CASE_VIEW", applicationId: appId, stage: app.stage, details: { capacities: access.capacities } });
   return {
     app,
+    credit: creditCheck ? { check: creditCheck, detail: creditDetail, narration: creditDetail ? creditResponseDetail(creditCheck).narration : null } : null,
     access,
     version,
     working,

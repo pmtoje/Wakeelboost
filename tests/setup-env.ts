@@ -9,3 +9,6 @@ process.env.SCANNER_DRIVER = "dev";
 process.env.APR_CALCULATOR = "wakeelboost-pricing@2026.1";
 process.env.OFFER_PDF_CONVERTER = "none";
 process.env.OFFER_AUTOGEN_INLINE = "false";
+// SeedFi: tests use the documented response shape through a test transport (never the network).
+const { installSeedfiStub } = await import("./seedfi-stub");
+installSeedfiStub();

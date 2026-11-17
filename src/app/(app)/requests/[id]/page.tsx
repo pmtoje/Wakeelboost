@@ -20,6 +20,7 @@ import { StageChip, OutcomeChip } from "@/components/Status";
 import { activeTemplate } from "@/server/domain/offer";
 import { liveOfferLetter } from "@/server/domain/offer-letters";
 import { PricingAssessment, ThresholdChip, pricingOf } from "@/components/PricingAssessment";
+import { CreditCheckResult, CreditStatusChip } from "@/components/CreditCheck";
 import { bandLabels, e4ToPercent, pricingSettingsAt } from "@/server/domain/pricing";
 
 /** The booked schedule uses a different frequency from the monthly assessment → label as monthly equivalent. */
@@ -178,8 +179,8 @@ export default async function CasePage({ params, searchParams }: { params: Promi
         <div className="row">
           {isInitiator && c.openTask?.assignee_id && c.openTask.assignee_id !== session.staffId && waited > REMINDER_MIN_AGE_MS && <ReminderButton applicationId={app.id} />}
           {isInitiator && (app.stage === "DRAFT" || (myTask && myTask.stage === "INITIATOR_CORRECTION")) && (
-            <Link className="btn btn-primary" href={`/requests/${app.id}/edit`}>
-              {app.stage === "DRAFT" ? "Continue draft" : "Edit and resubmit"}
+            <Link className="btn btn-primary" href={app.stage === "DRAFT" && !["NOT_REQUIRED", "ACCEPTABLE", "CLEARED"].includes(app.credit_check_status) ? `/requests/${app.id}/credit-check` : `/requests/${app.id}/edit`}>
+              {app.stage === "DRAFT" ? (["NOT_REQUIRED", "ACCEPTABLE", "CLEARED"].includes(app.credit_check_status) ? "Continue draft" : "Continue: credit check") : "Edit and resubmit"}
             </Link>
           )}
         </div>
@@ -273,6 +274,18 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
   const name = (id: string | null) => (id ? c.people[id] ?? "—" : "—");
   return (
     <div className="stack">
+      {app.credit_check_status === "NOT_REQUIRED" ? (
+        app.credit_check_note && <p className="small muted" style={{ margin: 0 }}>Credit check: {app.credit_check_note}.</p>
+      ) : (
+        <div className="card" style={{ margin: 0 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <h2 style={{ margin: 0 }}>SeedFi credit check</h2>
+            <CreditStatusChip status={app.credit_check_status} />
+          </div>
+          {app.product_manager_id && <p className="small muted" style={{ margin: "6px 0 0" }}>Product Manager: {name(app.product_manager_id)}</p>}
+          {c.credit ? <div style={{ marginTop: 12 }}><CreditCheckResult check={c.credit.check} detail={c.credit.detail} narration={c.credit.narration} /></div> : <p className="small muted">No enquiry has been made yet.</p>}
+        </div>
+      )}
       {c.assessment && pricingOf(c.assessment.outputs) && (() => {
         const p = pricingOf(c.assessment.outputs)!.pricing;
         return (
@@ -760,6 +773,25 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
   }
 
   switch (stage) {
+    case "CREDIT_REVIEW": {
+      const replies = c.decisions.filter((d: { action: string }) => d.action === "RESPOND_CLARIFICATION");
+      body.push(
+        <p key="t" className="small" style={{ margin: 0 }}>
+          SeedFi returned adverse findings for this customer. Review the result in the Overview, then clear the request to proceed, ask the initiator for clarification, or decline it. Clearing permits origination only; the facility still needs every credit approval.
+        </p>,
+      );
+      if (c.credit) body.push(<div key="s" className="summary-box small">Reviewed Seed Score <strong>{Number(c.credit.check.reviewed_score)}</strong> · overall {Number(c.credit.check.overall_score)} · {c.credit.check.has_credit_history ? "has credit history" : "no credit history"}<div className="muted">{(c.credit.check.outcome_reasons ?? []).join("; ")}</div></div>);
+      for (const r of replies) body.push(<div key={r.id} className="alert alert-info"><span><strong>Clarification from {c.people[r.actor_id] ?? "the initiator"}</strong> ({formatLagos(r.created_at)}): {r.reason}</span></div>);
+      body.push(<UploadPanel key="u" compact applicationId={app.id} title="Attach supporting evidence" categories={[{ code: "SUPPORTING", label: CATEGORY_LABEL.SUPPORTING }]} />);
+      break;
+    }
+    case "CREDIT_CLARIFICATION": {
+      const ask = c.decisions.filter((d: { action: string }) => d.action === "REQUEST_CLARIFICATION").at(-1);
+      if (ask) body.push(<div key="q" className="alert alert-warn"><AlertTriangle className="icon" aria-hidden="true" /><span><strong>The Product Manager asks:</strong> {ask.reason}</span></div>);
+      body.push(<p key="t" className="small" style={{ margin: 0 }}>Attach any supporting document, then send your clarification. The request returns to the Product Manager.</p>);
+      body.push(<UploadPanel key="u" compact applicationId={app.id} title="Attach a document" categories={["BANK_STATEMENT", "CONSENT_FORM", "SUPPORTING"].map((x) => ({ code: x, label: CATEGORY_LABEL[x] }))} />);
+      break;
+    }
     case "BUSINESS_ENDORSEMENT":
       body.push(<p key="t" className="small muted" style={{ margin: 0 }}>Business endorsement must be approved before credit routing. Review the Overview and Documents.</p>);
       body.push(<TaskButton key="e" hidden={hidden} action="ENDORSE" label="Endorse" doneHref={doneHref} />);
@@ -971,6 +1003,10 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
   }
 
   const reasonActions: [TaskAction, string, boolean][] = [
+    ["CLEAR_TO_PROCEED", "Clear to proceed", false],
+    ["RESPOND_CLARIFICATION", "Send clarification", false],
+    ["REQUEST_CLARIFICATION", "Request clarification", false],
+    ["DECLINE", "Decline", true],
     ["RETURN", stage === "CO3_PACK_REVIEW" ? "Return pack to initiator" : "Return for correction", false],
     ["REQUEST_INITIATOR", "Request documents from initiator", false],
     ["SEND_FOR_CORRECTION", "Send for Correction", false],

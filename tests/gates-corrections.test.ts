@@ -15,6 +15,7 @@ import {
   openTaskOf,
   preparePack,
   prepareFirstReview,
+  passCreditCheck,
 } from "@/server/demo/scenario";
 import { audits, key, outbox, resetDb } from "./helpers";
 
@@ -225,10 +226,13 @@ describe("rejection and correction routing", () => {
     const rm = await ctxFor("rm.ade@altbank.ng");
     const { createDraft, submitApplication } = await import("@/server/domain/workflow");
     const { id } = await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    // Facility details cannot be entered before the credit check.
+    await expect(saveDraft(rm, id, { data: { rentStart: "2020-01-01" } })).rejects.toThrow(/Complete the SeedFi credit check/);
+    await passCreditCheck(rm, id, "22212345678");
     await saveDraft(rm, id, { data: { rentStart: "2020-01-01", rentEnd: "2020-12-31" } });
     const err = await submitApplication(rm, id, key()).catch((e) => e);
     expect(err.fields.rentEnd).toMatch(/expired/);
-    expect(err.fields.bvn).toMatch(/BVN is required/);
+    expect(err.fields.bvn).toBeUndefined(); // carried over from the credit-checked identity
     expect(err.fields.doc_BANK_STATEMENT).toBeDefined();
     await expect(saveDraft(rm, id, { data: {}, bvn: "123" })).rejects.toMatchObject({ fields: { bvn: expect.any(String) } });
     // An amount above ₦50m is rejected at submission
@@ -241,6 +245,7 @@ describe("rejection and correction routing", () => {
     const ctx = await ctxFor("anm.north@altbank.ng");
     const { createDraft } = await import("@/server/domain/workflow");
     const { id } = await createDraft(ctx, { initiatorRole: "ANM", applicantType: "LIMITED" });
+    await passCreditCheck(ctx, id, "22200000001");
     const many = Array.from({ length: 15 }, (_, i) => ({ fullName: `Director ${i + 1}`, bvn: `222000000${String(i).padStart(2, "0")}` }));
     await saveDraft(ctx, id, { data: { companyName: "Big Co Ltd" }, directors: many });
     const n = await db.query("SELECT count(*)::int AS n FROM application_directors d JOIN application_versions v ON v.id = d.version_id WHERE v.application_id = $1", [id]);

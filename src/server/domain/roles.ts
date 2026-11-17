@@ -19,6 +19,7 @@ export const ROLES = [
   "REPORTING_ADMIN",
   "LEGAL_REVIEWER",
   "SHARIAH_REVIEWER",
+  "PRODUCT_MANAGER",
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -46,6 +47,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   REPORTING_ADMIN: "Reporting Admin",
   LEGAL_REVIEWER: "Legal (closure recipient)",
   SHARIAH_REVIEWER: "Shariah Compliance (closure recipient)",
+  PRODUCT_MANAGER: "Product Manager",
 };
 
 /** Positions that may be held by at most one active person at a time. */
