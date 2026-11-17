@@ -1,7 +1,7 @@
 import { Download, Eye } from "lucide-react";
 import { requireSuperAdmin } from "../guard";
 import { db } from "@/server/db";
-import { KNOWN_DOCX_PLACEHOLDERS, PLACEHOLDER_SOURCES, REQUIRED_DOCX_PLACEHOLDERS } from "@/server/domain/offer-docx";
+import { KNOWN_DOCX_PLACEHOLDERS, PLACEHOLDER_SOURCES, REQUIRED_DOCX_PLACEHOLDERS, REQUIRED_FORM_PLACEHOLDERS } from "@/server/domain/offer-docx";
 import { APPLICANT_TYPE_LABELS, type ApplicantType } from "@/server/domain/application-data";
 import { formatLagos } from "@/server/time";
 import { config } from "@/server/config";
@@ -17,7 +17,7 @@ export default async function Templates() {
     await db.query(
       `SELECT t.*, s.full_name AS created_by_name, a.full_name AS activated_by_name, p.full_name AS approved_by_name FROM offer_templates t
          LEFT JOIN staff s ON s.id = t.created_by LEFT JOIN staff a ON a.id = t.activated_by LEFT JOIN staff p ON p.id = t.approved_by
-        ORDER BY t.applicant_type NULLS LAST, t.status = 'ACTIVE' DESC, t.version DESC`,
+        ORDER BY t.doc_type <> 'OFFER_LETTER', t.doc_type, t.applicant_type NULLS LAST, t.status = 'ACTIVE' DESC, t.version DESC`,
     )
   ).rows;
   const types: ApplicantType[] = ["INDIVIDUAL", "ENTERPRISE", "LIMITED"];
@@ -27,12 +27,12 @@ export default async function Templates() {
     <>
       <PageHeader
         eyebrow="Administration"
-        title="Offer templates"
-        intro="WakeelBoost issues Murabaha (cost plus markup) offer letters only, one active template per applicant type. Letters are generated automatically when the Divisional Head approves a facility, from the active template approved by the Super Admin. Issued letters stay linked to the template version they were made from."
+        title="Offer and form templates"
+        intro="WakeelBoost issues Murabaha (cost plus markup) offer letters only, one active template per applicant type. Letters are generated automatically when the Divisional Head approves a facility, from the active template approved by the Super Admin. Issued letters stay linked to the template version they were made from. The bank's pre-disbursement agreement, GSI form and insurance form can be uploaded here too: they are prefilled from the facility record for signing on a tablet."
       />
       <div className="grid-3" style={{ marginBottom: 16 }}>
         {types.map((t) => {
-          const a = rows.find((r) => r.status === "ACTIVE" && r.applicant_type === t);
+          const a = rows.find((r) => r.status === "ACTIVE" && r.doc_type === "OFFER_LETTER" && r.applicant_type === t);
           return (
             <div className="card" key={t} style={{ margin: 0 }}>
               <p className="eyebrow">{APPLICANT_TYPE_LABELS[t]}</p>
@@ -52,6 +52,26 @@ export default async function Templates() {
           );
         })}
       </div>
+      <div className="grid-3" style={{ marginBottom: 16 }}>
+        {FORM_DOCS.map(([d, label]) => {
+          const a = rows.filter((r) => r.status === "ACTIVE" && r.doc_type === d);
+          return (
+            <div className="card" key={d} style={{ margin: 0 }}>
+              <p className="eyebrow">{label} (prefilled for signing)</p>
+              {a.length ? (
+                a.map((x) => (
+                  <div key={x.id}>
+                    <h2 style={{ marginBottom: 4 }}>{x.name} v{x.version} <span className="small muted">{x.applicant_type ? APPLICANT_TYPE_LABELS[x.applicant_type as ApplicantType] : "all types"}</span></h2>
+                    {x.production_approved ? <span className="badge badge-green">Approved</span> : <span className="badge badge-warn">Awaiting Super Admin approval</span>}
+                  </div>
+                ))
+              ) : (
+                <span className="badge">No template · initiators upload the signed form</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
       <div className="table-wrap" style={{ marginBottom: 16 }}>
         <table className="data responsive">
           <thead><tr><th>Template</th><th>Type</th><th>Status</th><th>Approval</th><th>Variables</th><th>Created</th><th>Activated</th><th><span className="sr-only">Actions</span></th></tr></thead>
@@ -59,7 +79,7 @@ export default async function Templates() {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td data-label="Template">{r.name} <span className="muted">v{r.version} · {r.format}</span><div className="small muted">{r.source_filename ?? ""}{r.notes ? ` · ${r.notes}` : ""}</div></td>
-                <td className="small" data-label="Type">{r.applicant_type ? APPLICANT_TYPE_LABELS[r.applicant_type as ApplicantType] : "All types"}</td>
+                <td className="small" data-label="Type">{DOC_TYPE_LABEL[r.doc_type as string] ?? r.doc_type}<div className="muted">{r.applicant_type ? APPLICANT_TYPE_LABELS[r.applicant_type as ApplicantType] : "All types"}</div></td>
                 <td data-label="Status"><span className={`badge ${r.status === "ACTIVE" ? "badge-green" : ""}`}>{r.status}</span></td>
                 <td className="small" data-label="Approval">{r.production_approved ? <>Approved{r.approved_at && <div className="muted">{r.approved_by_name ?? ""} {formatLagos(r.approved_at)}</div>}</> : <span className="badge badge-warn">Not approved</span>}</td>
                 <td className="small" data-label="Variables">{variableSummary(r)}</td>
@@ -123,10 +143,13 @@ export default async function Templates() {
   );
 }
 
-function variableSummary(r: { variables: string[] | null; applicant_type: string | null; format: string }) {
+const FORM_DOCS: [string, string][] = [["PRE_DISBURSEMENT", "Pre-disbursement agreement"], ["GSI_FORM", "GSI form"], ["INSURANCE_SIGNED", "Insurance (Takaful) form"]];
+const DOC_TYPE_LABEL: Record<string, string> = { OFFER_LETTER: "Murabaha offer letter", ...Object.fromEntries(FORM_DOCS) };
+
+function variableSummary(r: { variables: string[] | null; applicant_type: string | null; format: string; doc_type: string }) {
   if (r.format !== "DOCX") return <span className="muted">HTML</span>;
   if (!r.variables) return <span className="muted">Not recorded</span>;
-  const req = r.applicant_type ? REQUIRED_DOCX_PLACEHOLDERS[r.applicant_type as ApplicantType] : [];
+  const req = r.doc_type !== "OFFER_LETTER" ? REQUIRED_FORM_PLACEHOLDERS : r.applicant_type ? REQUIRED_DOCX_PLACEHOLDERS[r.applicant_type as ApplicantType] : [];
   const missing = req.filter((x) => !r.variables!.includes(x));
   const unknown = r.variables.filter((x) => !KNOWN_DOCX_PLACEHOLDERS.has(x));
   if (missing.length || unknown.length) return <span className="badge badge-red">{missing.length} missing · {unknown.length} unknown</span>;

@@ -426,3 +426,8 @@ dialog.modal::backdrop { background: rgb(0 0 0 / 60%); }
 .lifecycle li.lc-done > svg.icon { color: var(--success); }
 .lifecycle li.lc-current > svg.icon { color: var(--yellow); }
 .lifecycle li.lc-failed > svg.icon { color: var(--danger); }
+
+/* Signing on a tablet */
+.signature-pad { width: 100%; max-width: 640px; aspect-ratio: 3 / 1; height: auto; border: 1.5px dashed var(--line-strong); border-radius: var(--radius-sm); background: #fff; touch-action: none; cursor: crosshair; }
+.sign-preview { width: 100%; height: min(70vh, 720px); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; }
+.doc-table td, .doc-table th { vertical-align: middle; }

@@ -9,6 +9,7 @@ import { generateOffer } from "@/server/domain/offer";
 import { revealIdentifiers } from "@/server/domain/views";
 import { creditCheckActive, proceedWithReason, runCreditCheck } from "@/server/domain/credit-check";
 import { retryArchive } from "@/server/domain/archive";
+import { DOC_SLUGS, prefillFormsNow, signOnTablet, type SignerInput } from "@/server/domain/disbursement-docs";
 import { invalid } from "@/server/errors";
 import { parseNairaToKobo } from "@/server/money";
 import type { TaskAction } from "@/server/domain/stages";
@@ -218,6 +219,43 @@ export async function proceedWithReasonAction(_p: ActionState, fd: FormData): Pr
   try {
     const r = await proceedWithReason(ctx, appId, str(fd, "reason"));
     return { ok: true, message: r.message, nonce: Date.now() };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Initiator at offer preparation: prepare (or refresh) the bank's prefilled disbursement forms. */
+export async function prefillFormsAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx } = await requireUser();
+  try {
+    const r = await prefillFormsNow(ctx, str(fd, "applicationId"));
+    const n = r.prepared.length;
+    const message = n ? `${n} form${n === 1 ? "" : "s"} prepared from the facility record.` : r.skipped.length ? "The prepared forms are already up to date." : "No bank form templates are active yet. Upload the bank's signed forms instead.";
+    return { ok: true, message, nonce: Date.now() };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Initiator: the customer (and witness / signatories) sign a prepared document on the tablet. */
+export async function signOnTabletAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx } = await requireUser();
+  const appId = str(fd, "applicationId");
+  const docType = DOC_SLUGS[str(fd, "doc")];
+  try {
+    if (!docType) throw invalid("Unknown document.");
+    const roles: SignerInput["role"][] = ["CUSTOMER", "WITNESS", "SIGNATORY_1", "SIGNATORY_2"];
+    const signers: SignerInput[] = [];
+    for (const role of roles) {
+      const png = str(fd, `${role}.signature`);
+      const name = str(fd, `${role}.name`);
+      if (!png && !name) continue;
+      if (!png) throw invalid("Check the signatures.", { [role]: "Sign in the box." });
+      signers.push({ role, name, signaturePng: png, designation: str(fd, `${role}.designation`) || undefined, address: str(fd, `${role}.address`) || undefined, occupation: str(fd, `${role}.occupation`) || undefined });
+    }
+    if (fd.get("confirm") !== "on") throw invalid("Check the signatures.", { confirm: "Confirm the signer has read the document." });
+    const r = await signOnTablet(ctx, appId, docType, signers);
+    return { ok: true, message: `${r.label} signed. The signed copy is filed with the request.`, nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
   }

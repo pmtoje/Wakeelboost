@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Calculator, CheckCircle2, Eye, FilePlus2, Pencil, ShieldCheck } from "lucide-react";
 import { ActionForm, FormMessages, ReasonAction, SubmitButton, type FormState } from "@/components/forms";
-import { archiveAction, assessmentAction, generateOfferAction, reminderAction, revealAction, taskActionAction } from "../actions";
+import { archiveAction, assessmentAction, generateOfferAction, prefillFormsAction, reminderAction, revealAction, taskActionAction } from "../actions";
 
 type Hidden = Record<string, string>;
 const Hiddens = ({ h }: { h: Hidden }) => (
@@ -463,6 +463,16 @@ export function RetryArchiveButton({ applicationId, label }: { applicationId: st
     <ActionForm action={archiveAction} className="row">
       <input type="hidden" name="applicationId" value={applicationId} />
       <SubmitButton className="btn btn-sm">{label}</SubmitButton>
+    </ActionForm>
+  );
+}
+
+/** Prepare (or refresh) the bank's prefilled disbursement forms from the facility record. */
+export function PrefillFormsButton({ applicationId }: { applicationId: string }) {
+  return (
+    <ActionForm action={prefillFormsAction} className="row">
+      <input type="hidden" name="applicationId" value={applicationId} />
+      <SubmitButton className="btn btn-sm">Prepare forms from the facility record</SubmitButton>
     </ActionForm>
   );
 }

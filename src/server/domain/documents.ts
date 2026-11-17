@@ -35,6 +35,12 @@ export const DOC_CATEGORIES: DocCategory[] = [
   { code: "INSURANCE_EVIDENCE", label: "Evidence of insurance (Credit Officer 3)", multiple: false },
   { code: "SUPPORTING", label: "Other supporting document", multiple: true },
   { code: "SEEDFI_CREDIT_REPORT", label: "SeedFi credit check report", multiple: false },
+  { code: "PREFILLED_PRE_DISBURSEMENT", label: "Pre-disbursement agreement (prepared, unsigned · Word)", multiple: false },
+  { code: "PREFILLED_PRE_DISBURSEMENT_PDF", label: "Pre-disbursement agreement (prepared, unsigned · PDF)", multiple: false },
+  { code: "PREFILLED_GSI_FORM", label: "GSI form (prepared, unsigned · Word)", multiple: false },
+  { code: "PREFILLED_GSI_FORM_PDF", label: "GSI form (prepared, unsigned · PDF)", multiple: false },
+  { code: "PREFILLED_INSURANCE", label: "Insurance form (prepared, unsigned · Word)", multiple: false },
+  { code: "PREFILLED_INSURANCE_PDF", label: "Insurance form (prepared, unsigned · PDF)", multiple: false },
   { code: "FACILITY_ARCHIVE", label: "Facility archive (ZIP)", multiple: false },
 ];
 /** Categories that contain detailed credit information. */
@@ -173,7 +179,7 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
   if (input.data.length > config.maxUploadBytes) throw invalid(`The file exceeds the ${Math.round(config.maxUploadBytes / 1048576)} MB limit.`);
   const mime = sniffAllowedType(filename, input.data);
   if (!mime) throw invalid(`Unsupported or mismatched file type. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}.`);
-  if (input.category === "GENERATED_OFFER" || input.category === "GENERATED_OFFER_PDF" || input.category === "FACILITY_ARCHIVE" || input.category === "SEEDFI_CREDIT_REPORT") throw forbidden("Generated documents are produced by the system.");
+  if (input.category === "GENERATED_OFFER" || input.category === "GENERATED_OFFER_PDF" || input.category === "FACILITY_ARCHIVE" || input.category === "SEEDFI_CREDIT_REPORT" || input.category.startsWith("PREFILLED_")) throw forbidden("Generated documents are produced by the system.");
 
   const quarantineKey = `quarantine/${input.applicationId}/${randomUUID()}`;
   try {

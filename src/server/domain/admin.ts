@@ -10,7 +10,7 @@ import { type AppRow, assignmentSpec, eligibleStaff, notifyAssignment } from "./
 import { REGION_REQUIRED_ROLES, SINGLE_HOLDER_ROLES, isRegion, isRole, type Role } from "./roles";
 import type { Stage } from "./stages";
 import { validateTemplate, DOCX_MIME } from "./offer";
-import { assertDocx, docxPlaceholders, validateDocxTemplate } from "./offer-docx";
+import { assertDocx, docxPlaceholders, validateDocxTemplate, type TemplateDocType } from "./offer-docx";
 import type { ApplicantType } from "./application-data";
 import { objectStore } from "../storage";
 import { randomUUID } from "node:crypto";
@@ -233,9 +233,9 @@ export async function activateTemplate(ctx: Ctx, templateId: string) {
     // Contractual wording is used for live letters only after the Super Admin has approved it.
     if (!t.production_approved) throw gate("Approve this template version before activating it.");
     // One active template per applicant type: retire only the one it replaces (rollback = activating an earlier approved version).
-    await tx.query("UPDATE offer_templates SET status = 'RETIRED' WHERE status = 'ACTIVE' AND coalesce(applicant_type,'ALL') = coalesce($1,'ALL')", [t.applicant_type]);
+    await tx.query("UPDATE offer_templates SET status = 'RETIRED' WHERE status = 'ACTIVE' AND doc_type = $2 AND coalesce(applicant_type,'ALL') = coalesce($1,'ALL')", [t.applicant_type, t.doc_type]);
     await tx.query("UPDATE offer_templates SET status = 'ACTIVE', activated_by = $2, activated_at = $3 WHERE id = $1", [templateId, ctx.actor!.staffId, ctx.now]);
-    const prev = (await tx.query("SELECT id, version FROM offer_templates WHERE status = 'RETIRED' AND coalesce(applicant_type,'ALL') = coalesce($1,'ALL') AND activated_at IS NOT NULL ORDER BY activated_at DESC LIMIT 1", [t.applicant_type])).rows[0];
+    const prev = (await tx.query("SELECT id, version FROM offer_templates WHERE status = 'RETIRED' AND doc_type = $2 AND coalesce(applicant_type,'ALL') = coalesce($1,'ALL') AND activated_at IS NOT NULL ORDER BY activated_at DESC LIMIT 1", [t.applicant_type, t.doc_type])).rows[0];
     await audit(tx, ctx, { action: "TEMPLATE_ACTIVATED", actorRole: "SUPER_ADMIN", details: { templateId, name: t.name, version: t.version, applicantType: t.applicant_type, replaced: prev ? { templateId: prev.id, version: prev.version } : null, rollback: !!prev && Number(prev.version) > Number(t.version) } });
   });
 }
@@ -263,22 +263,26 @@ export async function isSuperAdmin(staffId: string) {
 export type { Role };
 
 /** Upload a new DOCX offer template version for an applicant type (saved as DRAFT until activated). */
-export async function createDocxTemplateVersion(ctx: Ctx, p: { name: string; applicantType: string; filename: string; data: Buffer; productionApproved: boolean; notes?: string }) {
-  if (!["INDIVIDUAL", "ENTERPRISE", "LIMITED"].includes(p.applicantType)) throw invalid("Choose the applicant type this template is for.");
+export async function createDocxTemplateVersion(ctx: Ctx, p: { name: string; applicantType: string; filename: string; data: Buffer; productionApproved: boolean; notes?: string; docType?: string }) {
+  const docType = (p.docType || "OFFER_LETTER") as TemplateDocType;
+  if (!["OFFER_LETTER", "PRE_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED"].includes(docType)) throw invalid("Choose the document this template is for.");
+  // Disbursement forms may apply to every applicant type; offer letters are per type.
+  const applicantType = p.applicantType === "ALL" && docType !== "OFFER_LETTER" ? null : p.applicantType;
+  if (applicantType !== null && !["INDIVIDUAL", "ENTERPRISE", "LIMITED"].includes(applicantType)) throw invalid("Choose the applicant type this template is for.");
   assertDocx(p.data);
-  const errors = await validateDocxTemplate(p.data, p.applicantType as ApplicantType);
+  const errors = await validateDocxTemplate(p.data, applicantType as ApplicantType | null, docType);
   if (errors.length) throw invalid(`The template cannot be used: ${errors.join(" ")}`);
   const variables = await docxPlaceholders(p.data);
   const key = `templates/offer/${randomUUID()}.docx`;
   await objectStore().put(key, p.data, DOCX_MIME);
   return adminOp(ctx, "TEMPLATE_CREATED", async (tx) => {
-    const v = (await tx.query<{ max: number | null }>("SELECT max(version) AS max FROM offer_templates WHERE name = $1 AND applicant_type = $2", [p.name.trim(), p.applicantType])).rows[0].max ?? 0;
+    const v = (await tx.query<{ max: number | null }>("SELECT max(version) AS max FROM offer_templates WHERE name = $1 AND coalesce(applicant_type,'ALL') = coalesce($2,'ALL') AND doc_type = $3", [p.name.trim(), applicantType, docType])).rows[0].max ?? 0;
     const r = await tx.query<{ id: string }>(
-      `INSERT INTO offer_templates (name, version, format, applicant_type, storage_key, source_filename, status, production_approved, approved_by, approved_at, notes, created_by, created_at, variables, validated_at)
-       VALUES ($1,$2,'DOCX',$3,$4,$5,'DRAFT',$6,$7,$8,$9,$10,$11,$12,$11) RETURNING id`,
-      [p.name.trim(), v + 1, p.applicantType, key, p.filename.slice(0, 200), p.productionApproved, p.productionApproved ? ctx.actor!.staffId : null, p.productionApproved ? ctx.now : null, p.notes ?? null, ctx.actor!.staffId, ctx.now, JSON.stringify(variables)],
+      `INSERT INTO offer_templates (name, version, format, applicant_type, storage_key, source_filename, status, production_approved, approved_by, approved_at, notes, created_by, created_at, variables, validated_at, doc_type)
+       VALUES ($1,$2,'DOCX',$3,$4,$5,'DRAFT',$6,$7,$8,$9,$10,$11,$12,$11,$13) RETURNING id`,
+      [p.name.trim(), v + 1, applicantType, key, p.filename.slice(0, 200), p.productionApproved, p.productionApproved ? ctx.actor!.staffId : null, p.productionApproved ? ctx.now : null, p.notes ?? null, ctx.actor!.staffId, ctx.now, JSON.stringify(variables), docType],
     );
-    await audit(tx, ctx, { action: "TEMPLATE_CREATED", actorRole: "SUPER_ADMIN", details: { templateId: r.rows[0].id, name: p.name, applicantType: p.applicantType, version: v + 1, format: "DOCX", productionApproved: p.productionApproved } });
+    await audit(tx, ctx, { action: "TEMPLATE_CREATED", actorRole: "SUPER_ADMIN", details: { templateId: r.rows[0].id, name: p.name, applicantType, docType, version: v + 1, format: "DOCX", productionApproved: p.productionApproved } });
     return r.rows[0].id;
   });
 }

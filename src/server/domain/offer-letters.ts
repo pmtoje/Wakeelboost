@@ -86,6 +86,19 @@ const errText = (e: unknown) => (e instanceof DomainError ? e.message : e instan
  * SKIP LOCKED and only PENDING/FAILED letters are processed.
  */
 export async function processOfferLetter(letterId: string, now = new Date()): Promise<OfferLetterStatus | "BUSY"> {
+  const status = await issueOfferLetter(letterId, now);
+  if (status === "ISSUED") {
+    // Prepare the bank's disbursement forms alongside the letter (best effort; the initiator can retry).
+    const appId = (await db.query<{ application_id: string }>("SELECT application_id FROM offer_letters WHERE id = $1", [letterId])).rows[0]?.application_id;
+    if (appId) {
+      const { prefillForms } = await import("./disbursement-docs");
+      await prefillForms(appId, now).catch((e) => console.error("[forms] prefill failed", e));
+    }
+  }
+  return status;
+}
+
+async function issueOfferLetter(letterId: string, now: Date): Promise<OfferLetterStatus | "BUSY"> {
   const ctx = systemCtx(now);
   try {
     return await withTx(async (tx) => {

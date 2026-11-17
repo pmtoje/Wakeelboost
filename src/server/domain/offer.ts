@@ -7,7 +7,7 @@ import { formatDateOnly, lagosDate } from "../time";
 import { approvedAssessment } from "./assessment";
 import { objectStore } from "../storage";
 import { nairaInWords } from "../words";
-import { docxToPdf, renderDocx } from "./offer-docx";
+import { docxToPdf, renderDocx, type TemplateDocType } from "./offer-docx";
 import { currentSecondSignatory } from "./signatory";
 import { assetCostKobo, type ApplicantType, type DraftData } from "./application-data";
 
@@ -112,13 +112,13 @@ export function validateTemplate(html: string): string[] {
 }
 
 /** Active template for an applicant type (type-specific first, then an all-types fallback). */
-export async function activeTemplate(q: Db, applicantType?: ApplicantType) {
+export async function activeTemplate(q: Db, applicantType?: ApplicantType, docType: TemplateDocType = "OFFER_LETTER") {
   return (
     (
       await q.query(
-        `SELECT * FROM offer_templates WHERE status = 'ACTIVE' AND (applicant_type = $1 OR applicant_type IS NULL)
+        `SELECT * FROM offer_templates WHERE status = 'ACTIVE' AND doc_type = $2 AND (applicant_type = $1 OR applicant_type IS NULL)
           ORDER BY applicant_type NULLS LAST LIMIT 1`,
-        [applicantType ?? null],
+        [applicantType ?? null, docType],
       )
     ).rows[0] ?? null
   );
@@ -197,6 +197,15 @@ export function offerDocxValues(o: OfferData): { values: Record<string, string>;
     signatory_1_title: limited ? o.people.initiatorTitle : o.people.endorserTitle,
     signatory_2_name: limited ? o.people.endorserName : (o.people.secondSignatoryName ?? ""),
     signatory_2_title: limited ? o.people.endorserTitle : (o.people.secondSignatoryTitle || "Head, Payment & Collection"),
+    supplier_name: o.data.supplierName ?? "",
+    supplier_address: o.data.supplierAddress ?? "",
+    supplier_phone: o.data.supplierPhone ?? "",
+    supplier_account: o.data.supplierAccount ?? "",
+    invoice_ref: o.data.invoiceRef ?? "",
+    customer_phone: o.data.phone ?? "",
+    customer_email: o.data.email ?? "",
+    pos_serial: o.data.posSerial ?? "",
+    dao_code: o.data.daoCode ?? "",
   };
   return { values, loops: { directors_rest: rest.map((d, i) => ({ director_index: String(i + 2), director_name: d.fullName, director_bvn: d.bvn })) } };
 }
@@ -218,7 +227,7 @@ export const REQUIRED_OFFER_VALUES = ["customer_name", "request_ref", "financed_
  * Populate the active Murabaha template for an application from its approved facility record.
  * Pure rendering: no rows are written here. Throws a gate error when mandatory data is missing.
  */
-export async function buildOfferFiles(tx: Db, app: Record<string, unknown> & { id: string; ref: string; applicant_type: ApplicantType; current_version_id: string; initiator_id: string; endorser_id: string | null; initiator_role: string }, tpl: Record<string, unknown>, now: Date): Promise<BuiltOffer> {
+export async function buildOfferFiles(tx: Db, app: Record<string, unknown> & { id: string; ref: string; applicant_type: ApplicantType; current_version_id: string; initiator_id: string; endorser_id: string | null; initiator_role: string }, tpl: Record<string, unknown>, now: Date, prefix = "Offer"): Promise<BuiltOffer> {
   const version = (await tx.query("SELECT * FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0];
   if (!version) throw gate("The facility record has no submitted version.");
   const directors = (await tx.query("SELECT * FROM application_directors WHERE version_id = $1 ORDER BY position", [version.id])).rows;
@@ -254,8 +263,8 @@ export async function buildOfferFiles(tx: Db, app: Record<string, unknown> & { i
     const safe = { ...values, bvn: values.bvn ? "(set)" : "", tin: values.tin ? "(set)" : "", first_director_bvn: values.first_director_bvn ? "(set)" : "" };
     return {
       format: "DOCX",
-      main: { filename: `Offer-${app.ref}-${String(app.applicant_type).toLowerCase()}-t${tpl.version}.docx`, mime: DOCX_MIME, data: docx },
-      pdf: pdfBuf ? { filename: `Offer-${app.ref}-t${tpl.version}.pdf`, data: pdfBuf } : null,
+      main: { filename: `${prefix}-${app.ref}-${String(app.applicant_type).toLowerCase()}-t${tpl.version}.docx`, mime: DOCX_MIME, data: docx },
+      pdf: pdfBuf ? { filename: `${prefix}-${app.ref}-t${tpl.version}.pdf`, data: pdfBuf } : null,
       values: safe,
       assessmentId: assessment.id,
     };

@@ -60,7 +60,7 @@ export const ARCHIVE_SECTIONS: { folder: string; categories: string[] }[] = [
   { folder: "06-Credit-assessment", categories: ["CREDIT_REPORT", "DSR_EXCEPTION_EVIDENCE"] },
   { folder: "07-Murabaha-offer-letter", categories: ["GENERATED_OFFER", "GENERATED_OFFER_PDF"] },
   { folder: "08-Signed-offer-letter", categories: ["SIGNED_OFFER"] },
-  { folder: "09-Asset-purchase-and-sale", categories: ["PRE_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED", "INSURANCE_EVIDENCE"] },
+  { folder: "09-Asset-purchase-and-sale", categories: ["PRE_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED", "INSURANCE_EVIDENCE", "PREFILLED_PRE_DISBURSEMENT", "PREFILLED_PRE_DISBURSEMENT_PDF", "PREFILLED_GSI_FORM", "PREFILLED_GSI_FORM_PDF", "PREFILLED_INSURANCE", "PREFILLED_INSURANCE_PDF"] },
   { folder: "10-Supporting-correspondence", categories: ["SUPPORTING"] },
 ];
 const RECORD_FOLDER = "00-Facility-record";

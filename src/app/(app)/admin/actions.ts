@@ -63,7 +63,7 @@ export const assignTaskAction = async (_p: ActionState, fd: FormData) => run(fd,
 export const createTemplateAction = async (_p: ActionState, fd: FormData) =>
   run(fd, async (f, ctx) => {
     await createTemplateVersion(ctx, { name: s(f, "name"), bodyHtml: String(f.get("bodyHtml") ?? ""), productionApproved: f.get("productionApproved") === "on", notes: s(f, "notes") });
-  }, "Template version saved as draft. Activate it to use it for new offers.");
+  }, "Template version saved. Approve and activate it to use it for new documents.");
 export const activateTemplateAction = async (_p: ActionState, fd: FormData) => run(fd, (f, ctx) => activateTemplate(ctx, s(f, "templateId")), "Template activated.");
 export const scheduleAction = async (_p: ActionState, fd: FormData) =>
   run(fd, (f, ctx) =>
@@ -88,12 +88,13 @@ export async function uploadTemplateAction(_p: ActionState, fd: FormData): Promi
     await createDocxTemplateVersion(ctx, {
       name: s(fd, "name"),
       applicantType: s(fd, "applicantType"),
+      docType: s(fd, "docType") || "OFFER_LETTER",
       filename: file.name,
       data: Buffer.from(await file.arrayBuffer()),
       productionApproved: fd.get("productionApproved") === "on",
       notes: s(fd, "notes"),
     });
-    return { ok: true, message: "Template version saved as draft. Activate it to use it for new offers.", nonce: Date.now() };
+    return { ok: true, message: "Template version saved. Approve and activate it to use it for new documents.", nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
   }

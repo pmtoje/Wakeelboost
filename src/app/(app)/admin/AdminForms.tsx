@@ -148,9 +148,19 @@ export function UploadTemplateForm() {
     <ActionForm action={A.uploadTemplateAction} resetOnSuccess encType="multipart/form-data">
       <div className="grid-3">
         <div className="field">
+          <label htmlFor="ut-doc">Document</label>
+          <select id="ut-doc" name="docType" defaultValue="OFFER_LETTER">
+            <option value="OFFER_LETTER">Murabaha offer letter</option>
+            <option value="PRE_DISBURSEMENT">Pre-disbursement agreement</option>
+            <option value="GSI_FORM">GSI form</option>
+            <option value="INSURANCE_SIGNED">Customer insurance (Takaful) form</option>
+          </select>
+        </div>
+        <div className="field">
           <label htmlFor="ut-type">Applicant type</label>
           <select id="ut-type" name="applicantType" required defaultValue="">
             <option value="" disabled>Choose…</option>
+            <option value="ALL">All applicant types (forms only)</option>
             <option value="INDIVIDUAL">Individual</option>
             <option value="ENTERPRISE">Enterprise</option>
             <option value="LIMITED">Limited (Corporate)</option>

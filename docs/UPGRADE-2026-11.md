@@ -70,6 +70,16 @@ not received.
   copy exists). Facilities waiting at offer preparation without one: queued for automatic generation.
 - Every facility gets a document repository; closed facilities are queued for their archive.
 
+## Disbursement documents: prefilled forms and signing on a tablet
+
+- **Bank templates approved.** The three Murabaha offer letter templates (Individual, Enterprise, Corporate) are approved for live use (migration 011, audited as `TEMPLATE_APPROVED`).
+- **Typed templates.** Super Admin → Offer and form templates now takes a *document* for each upload: Murabaha offer letter, pre-disbursement agreement, GSI form or customer insurance (Takaful) form. A form can apply to all applicant types. Forms need `{{customer_name}}` and may use any known placeholder (supplier, invoice, contact, POS serial, DAO code, amounts, dates…). Interest-rate wording is refused on every document.
+- **Prefill.** When the offer letter is issued, every form with an active, approved template is filled from the approved facility record (Word copy + PDF preview), audited as `FORM_PREFILLED`. The initiator can refresh them with *Prepare forms from the facility record*. Forms with no template are never invented: the initiator uploads the bank's signed form, exactly as before.
+- **Sign on a tablet.** At offer pack preparation the initiator opens *Sign on tablet* for any prepared document. The customer reads it on screen (or downloads it), then the customer and witness sign with a finger or stylus (Corporate: one or two authorised signatories with designations). The signed copy is the prepared document plus an electronic signature page carrying the signatures, the names and witness details, the time, who captured it, the device and the SHA-256 checksum of the exact document presented. It is filed as the signed pack document (the signed offer letter records customer acceptance), stored in `e_signatures` and audited as `DOCUMENT_SIGNED_ON_TABLET`.
+- **Download / preview / re-upload.** Every prepared and signed copy can be previewed or downloaded from the action panel. A paper-signed copy can always be uploaded instead; it replaces the previous signed copy and every version is kept.
+- **Production** needs LibreOffice for the signed PDF (as for offer letters).
+- **Pending from the bank:** the Word templates for the pre-disbursement agreement, GSI form and insurance form. Upload them under Offer and form templates, approve and activate.
+
 ## Before production
 
 1. **SeedFi (live)**: WakeelBoost uses the same Alt Mall SeedFi production key as ARAF
