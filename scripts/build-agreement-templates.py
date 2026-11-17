@@ -170,17 +170,19 @@ def build_pre_company(src, out):
 
 def post_common(doc):
     offer_dated(doc)
+    # Goods table: one repeating row (grows to one row per item); the bank's blank rows 2 and 3 are removed.
     t = doc.tables[0]
-    for n in (1, 2, 3):
-        row = t.rows[n]
-        for cell, key in ((row.cells[1], f"item_{n}_description"), (row.cells[2], f"item_{n}_units")):
-            p = cell.paragraphs[0]
-            if p.runs:
-                p.runs[0].text = "{{" + key + "}}"
-                for r in p.runs[1:]:
-                    r.text = ""
-            else:
-                p.add_run("{{" + key + "}}")
+    row = t.rows[1]
+    for cell, text in ((row.cells[0], "{{#asset_rows}}{{item_no}}."), (row.cells[1], "{{item_description}}"), (row.cells[2], "{{item_units}}{{/asset_rows}}")):
+        p = cell.paragraphs[0]
+        if p.runs:
+            p.runs[0].text = text
+            for r in p.runs[1:]:
+                r.text = ""
+        else:
+            p.add_run(text)
+    for extra in list(t.rows)[2:]:
+        extra._tr.getparent().remove(extra._tr)
     runs_replace(para(doc, "Cost Price-"), r"[….]+", "{{cost_price}}")
     runs_replace(para(doc, "Sale Price-"), r"[….]+", "{{cost_plus_markup}}")
     runs_replace(para(doc, "Monthly Instalment-"), r"N[….]+", "{{instalment_amount}}")

@@ -12,6 +12,8 @@ import type { ApplicantType } from "./application-data";
  *  - `{{key}}` is replaced in document, header and footer parts (values are XML-escaped).
  *  - A paragraph containing `{{#list}} ... {{/list}}` is repeated once per item of `list`
  *    (used for directors 2..n of a Limited company); it is removed when the list is empty.
+ *  - A table row containing `{{#list}}` (first cell) ... `{{/list}}` (last cell) is repeated once
+ *    per item (used for the goods table of the Murabaha sale contract: one row per item).
  * Placeholders must each sit inside one text run; `validateDocxTemplate` checks this.
  */
 export type DocxValues = Record<string, string>;
@@ -20,6 +22,7 @@ export type DocxLoops = Record<string, DocxValues[]>;
 const PARTS = /^word\/(document|header\d*|footer\d*)\.xml$/;
 const TOKEN = /\{\{([#/]?)([a-z0-9_]+)\}\}/g;
 const PARA = /<w:p[\s>](?:(?!<w:p[\s>]).)*?<\/w:p>/gs;
+const ROW = /<w:tr[\s>](?:(?!<w:tr[\s>]).)*?<\/w:tr>/gs;
 
 function xmlEscape(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -34,6 +37,15 @@ export async function renderDocx(template: Buffer, values: DocxValues, loops: Do
   for (const name of Object.keys(zip.files)) {
     if (!PARTS.test(name)) continue;
     let xml = await zip.file(name)!.async("string");
+    // Repeating table rows first, so their markers are gone before paragraph loops run.
+    xml = xml.replace(ROW, (row) => {
+      const m = /\{\{#([a-z0-9_]+)\}\}/.exec(row);
+      if (!m || !row.includes(`{{/${m[1]}}}`)) return row;
+      if (/\{\{#[a-z0-9_]+\}\}[^]*?<\/w:p>/.exec(row)?.[0].includes(`{{/${m[1]}}}`)) return row; // paragraph loop inside a cell
+      const items = loops[m[1]] ?? [];
+      const body = row.replace(`{{#${m[1]}}}`, "").replace(`{{/${m[1]}}}`, "");
+      return items.map((it) => fill(body, { ...values, ...it })).join("");
+    });
     xml = xml.replace(PARA, (p) => {
       const m = /\{\{#([a-z0-9_]+)\}\}/.exec(p);
       if (!m) return p;
@@ -66,6 +78,7 @@ export const KNOWN_DOCX_PLACEHOLDERS = new Set([
   "supplier_name", "supplier_address", "supplier_phone", "supplier_account", "invoice_ref", "customer_phone", "customer_email", "pos_serial", "dao_code",
   "agreement_day", "agreement_month_year", "offer_letter_day", "offer_letter_month_year", "customer_account",
   "item_1_description", "item_1_units", "item_2_description", "item_2_units", "item_3_description", "item_3_units",
+  "#asset_rows", "/asset_rows", "item_no", "item_description", "item_units",
   "#directors_rest", "/directors_rest",
 ]);
 
@@ -112,7 +125,12 @@ export const PLACEHOLDER_SOURCES: Record<string, string> = {
   offer_letter_day: "Day the Murabaha offer letter was issued",
   offer_letter_month_year: "Month and year the offer letter was issued",
   customer_account: "Customer's AltBank account number (dotted line when not captured)",
-  item_1_description: "Goods line 1 (sale contract asset table)",
+  "#asset_rows": "Start of the repeating goods row (first cell of the row)",
+  "/asset_rows": "End of the repeating goods row (last cell of the row)",
+  item_no: "Goods row number (repeating row)",
+  item_description: "Goods description (repeating row)",
+  item_units: "Number of units (repeating row)",
+  item_1_description: "Goods line 1 (fixed three-row tables)",
   item_1_units: "Goods line 1 quantity",
   item_2_description: "Goods line 2",
   item_2_units: "Goods line 2 quantity",
@@ -171,6 +189,10 @@ export async function validateDocxTemplate(buf: Buffer, type: ApplicantType | nu
   for (const r of required) if (!found.has(r)) errors.push(`Missing placeholder {{${r}}}.`);
   if (docType !== "OFFER_LETTER" && !FORM_NAME_PLACEHOLDERS.some((r) => found.has(r))) errors.push("Missing placeholder {{customer_name}} (or {{proprietor_name}} / {{company_name}}).");
   if (found.has("#directors_rest") !== found.has("/directors_rest")) errors.push("The {{#directors_rest}} … {{/directors_rest}} markers must both be in the same paragraph.");
+  if (found.has("#asset_rows") || found.has("/asset_rows")) {
+    const rows = [...(await zip.file("word/document.xml")!.async("string")).matchAll(ROW)].map((r) => r[0].replace(/<[^>]+>/g, ""));
+    if (!rows.some((r) => r.includes("{{#asset_rows}}") && r.includes("{{/asset_rows}}"))) errors.push("The {{#asset_rows}} … {{/asset_rows}} markers must both be in the same table row (first and last cell).");
+  }
   return [...new Set(errors)];
 }
 

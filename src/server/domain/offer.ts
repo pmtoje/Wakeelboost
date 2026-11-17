@@ -239,7 +239,7 @@ export function offerDocxValues(o: OfferData): { values: Record<string, string>;
     customer_account: o.data.customerAccount || BLANK,
     ...itemRows(o.data.items),
   };
-  return { values, loops: { directors_rest: rest.map((d, i) => ({ director_index: String(i + 2), director_name: d.fullName, director_bvn: d.bvn })) } };
+  return { values, loops: { asset_rows: o.data.items.map((it, i) => ({ item_no: String(i + 1), item_description: it.description, item_units: it.quantity.toLocaleString("en-NG") })), directors_rest: rest.map((d, i) => ({ director_index: String(i + 2), director_name: d.fullName, director_bvn: d.bvn })) } };
 }
 
 export interface BuiltOffer {

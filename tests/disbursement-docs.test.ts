@@ -4,6 +4,7 @@ import { deflateSync, crc32 } from "node:zlib";
 import { randomBytes } from "node:crypto";
 import JSZip from "jszip";
 import { db } from "@/server/db";
+import { docxPlaceholders, renderDocx, validateDocxTemplate } from "@/server/domain/offer-docx";
 import { NAIRA } from "@/server/money";
 import { readDocumentForActor, uploadDocument } from "@/server/domain/documents";
 import { activateTemplate, createDocxTemplateVersion } from "@/server/domain/admin";
@@ -209,7 +210,10 @@ describe("disbursement documents", () => {
     const doc = (await db.query("SELECT id FROM documents WHERE application_id = $1 AND category = 'PREFILLED_POST_DISBURSEMENT'", [id])).rows[0];
     const { text } = await docText(doc.id, RM);
     const items = (await db.query("SELECT v.data FROM applications a JOIN application_versions v ON v.id = a.current_version_id WHERE a.id = $1", [id])).rows[0].data.items;
-    expect(text).toContain(items[0].description);
+    for (const it of items) expect(text).toContain(it.description);
+    const table = (await JSZip.loadAsync((await readDocumentForActor(ctx, doc.id, "download")).data)).file("word/document.xml")!;
+    const rows = ((await table.async("string")).match(/<w:tr[\s>]/g) ?? []).length;
+    expect(rows).toBe(1 + items.length); // header + one row per item
     expect(text).toMatch(/Tenor- \d+ months/);
     expect(text).toContain("RECEIPT OF ASSET");
     expect(text).not.toMatch(/\{\{/);
@@ -252,6 +256,20 @@ describe("disbursement documents", () => {
     await uploadDocument(ctx, { applicationId: id, category: "PRE_DISBURSEMENT", filename: "signed-on-paper.pdf", data: makePdf("signed on paper") });
     const v = (await db.query("SELECT filename, superseded_at FROM documents WHERE application_id = $1 AND category = 'PRE_DISBURSEMENT' ORDER BY version_no", [id])).rows;
     expect(v.map((x) => [x.filename.startsWith("Signed-"), x.superseded_at === null])).toEqual([[true, false], [false, true]]);
+  });
+
+  it("the sale contract's goods table grows to one numbered row per item", async () => {
+    const tpl = readFileSync("templates/agreements/sale-contract-individual.docx");
+    expect(await validateDocxTemplate(tpl, "INDIVIDUAL", "POST_DISBURSEMENT")).toEqual([]);
+    const names = (await docxPlaceholders(tpl)).filter((n) => !/^[#/]/.test(n));
+    const values = Object.fromEntries(names.map((n) => [n, "x"]));
+    const goods = ["Rice", "Noodles", "Vegetable oil", "Sugar", "Flour"].map((d, i) => ({ item_no: String(i + 1), item_description: d, item_units: String((i + 1) * 10) }));
+    const out = await renderDocx(tpl, values, { asset_rows: goods });
+    const xml = await (await JSZip.loadAsync(out)).file("word/document.xml")!.async("string");
+    const rows = [...xml.matchAll(/<w:tr[\s>](?:(?!<w:tr[\s>]).)*?<\/w:tr>/gs)].map((r) => r[0].replace(/<[^>]+>/g, "|").replace(/\|+/g, "|"));
+    expect(rows).toHaveLength(6);
+    expect(rows[5]).toMatch(/\|5\.\|Flour\|50\|/);
+    expect(xml).not.toContain("asset_rows");
   });
 });
 
