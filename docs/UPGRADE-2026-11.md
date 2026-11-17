@@ -21,6 +21,15 @@ filed with the facility (and in the archive under `04-SeedFi-credit-check`) and 
 initiator, the Product Manager, credit officers and approvers on the case and the Super Admin. No
 report is produced for a failed enquiry.
 
+## Before SeedFi is set up
+
+The credit check switches on by itself once SeedFi is configured on the server (base URL plus key or
+sign-in; in production, the live service). Until then every initiator, including Agent Network Managers,
+creates requests that go straight to the facility application, recorded as "SeedFi credit check not
+active when this request was created". Drafts already waiting for a check are released and noted at
+submission. After SeedFi is configured, new requests start with the credit check again; requests
+created meanwhile are not sent back.
+
 ## Journey
 
 New request → customer identification and consent → SeedFi Seed Score → eligibility:

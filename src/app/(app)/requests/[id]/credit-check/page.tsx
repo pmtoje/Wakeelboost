@@ -8,7 +8,7 @@ import { formatLagos } from "@/server/time";
 import { DomainError } from "@/server/errors";
 import { getCase } from "@/server/domain/views";
 import { APPLICANT_TYPE_LABELS } from "@/server/domain/application-data";
-import { canSeeCreditDetail, creditCheckHistory, creditResponseDetail, originationOpen, type CreditCheckStatus } from "@/server/domain/credit-check";
+import { canSeeCreditDetail, creditCheckHistory, creditResponseDetail, originationOpen, waitingOnInactiveCheck, type CreditCheckStatus } from "@/server/domain/credit-check";
 import { PageHeader } from "@/components/PageHeader";
 import { CreditCheckResult, CreditJourney, CreditStatusChip } from "@/components/CreditCheck";
 import { CreditCheckForm, ProceedWithReasonForm } from "./CreditCheckForm";
@@ -29,6 +29,8 @@ export default async function CreditCheckPage({ params }: { params: Promise<{ id
   if (app.initiator_id !== session.staffId) redirect(`/requests/${id}`);
   const status = app.credit_check_status as CreditCheckStatus;
   if (status === "NOT_REQUIRED") redirect(`/requests/${id}`);
+  // SeedFi is not set up yet: the request goes straight to the facility application.
+  if (waitingOnInactiveCheck(app)) redirect(`/requests/${id}/edit`);
   const history = await creditCheckHistory(db, id);
   const latest = history[0] ?? null;
   const detail = await canSeeCreditDetail(db, session.staffId, id);

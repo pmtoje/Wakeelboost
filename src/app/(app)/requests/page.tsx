@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CreditStatusChip } from "@/components/CreditCheck";
+import { waitingOnInactiveCheck } from "@/server/domain/credit-check";
 import { requireUser } from "../../_lib/auth";
 import { db } from "@/server/db";
 import { initiatorRequests } from "@/server/domain/views";
@@ -43,7 +44,7 @@ export default async function Progress() {
             {drafts.map((d) => (
               <li key={d.id}>
                 <Link href={`/requests/${d.id}/edit`}>{d.ref}</Link> · {d.customer_name || "Unnamed draft"} · last saved {formatLagos(d.updated_at)}{" "}
-                {d.credit_check_status && d.credit_check_status !== "NOT_REQUIRED" && <CreditStatusChip status={d.credit_check_status} />}
+                {d.credit_check_status && d.credit_check_status !== "NOT_REQUIRED" && !waitingOnInactiveCheck({ stage: "DRAFT", credit_check_status: d.credit_check_status }) && <CreditStatusChip status={d.credit_check_status} />}
               </li>
             ))}
           </ul>

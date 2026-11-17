@@ -425,3 +425,50 @@ describe("automatic SeedFi sign-in (Altmall account)", () => {
       expect(calls.some((c) => c.url.endsWith("/seed-score/calculate"))).toBe(false);
     }));
 });
+
+describe("while SeedFi is not set up", () => {
+  async function inactive(fn: () => Promise<void>) {
+    const key = process.env.SEEDFI_API_KEY;
+    delete process.env.SEEDFI_API_KEY;
+    try {
+      await fn();
+    } finally {
+      process.env.SEEDFI_API_KEY = key;
+    }
+  }
+
+  it("ANMs (and every initiator) make requests directly, without the credit check step", () =>
+    inactive(async () => {
+      const anm = await ctxFor("anm.south@altbank.ng");
+      const { id } = await createDraft(anm, { initiatorRole: "ANM", applicantType: "INDIVIDUAL" });
+      expect(await appRow(id)).toMatchObject({ credit_check_status: "NOT_REQUIRED", credit_check_note: "SeedFi credit check not active when this request was created" });
+      await saveDraft(anm, id, { data: { ...sampleData("INDIVIDUAL", NAIRA(2_000_000)) }, bvn: "22212345678" });
+      for (const c of ["BANK_STATEMENT", "SUPPLIER_INVOICE", "APPLICATION_FORM", "CONSENT_FORM", "RENT_RECEIPT"]) await uploadDocument(anm, { applicationId: id, category: c, filename: `${c}.pdf`, data: makePdf(c) });
+      await submitApplication(anm, id, randomUUID());
+      expect((await openTaskOf(id)).stage).toBe("BUSINESS_ENDORSEMENT");
+      expect(calls.length).toBe(0);
+    }));
+
+  it("releases drafts that were waiting for a check, and records why at submission", async () => {
+    const { rm, id } = await newDraft(); // created while SeedFi was set up
+    expect((await appRow(id)).credit_check_status).toBe("REQUIRED");
+    await inactive(async () => {
+      await saveDraft(rm, id, { data: {}, bvn: "22212345678" });
+      await completeAndSubmit(rm, id);
+      expect((await openTaskOf(id)).stage).toBe("BUSINESS_ENDORSEMENT");
+      expect(await appRow(id)).toMatchObject({ credit_check_status: "NOT_REQUIRED", credit_check_note: "SeedFi credit check not active when this request was submitted" });
+      expect((await audits("CREDIT_CHECK_NOT_ACTIVE")).length).toBe(1);
+    });
+  });
+
+  it("brings the check back automatically for new requests once SeedFi is configured", async () => {
+    await inactive(async () => {
+      const { rm, id } = await newDraft();
+      expect((await appRow(id)).credit_check_status).toBe("NOT_REQUIRED");
+      void rm;
+    });
+    const { rm, id } = await newDraft();
+    expect((await appRow(id)).credit_check_status).toBe("REQUIRED");
+    await expect(saveDraft(rm, id, { data: {} })).rejects.toThrow(/Complete the SeedFi credit check/);
+  });
+});

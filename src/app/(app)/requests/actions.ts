@@ -7,7 +7,7 @@ import { uploadDocument } from "@/server/domain/documents";
 import { parseCalculatorForm, recordAssessment } from "@/server/domain/assessment";
 import { generateOffer } from "@/server/domain/offer";
 import { revealIdentifiers } from "@/server/domain/views";
-import { proceedWithReason, runCreditCheck } from "@/server/domain/credit-check";
+import { creditCheckActive, proceedWithReason, runCreditCheck } from "@/server/domain/credit-check";
 import { retryArchive } from "@/server/domain/archive";
 import { invalid } from "@/server/errors";
 import { parseNairaToKobo } from "@/server/money";
@@ -24,7 +24,7 @@ export async function createDraftAction(_p: ActionState, fd: FormData): Promise<
   } catch (e) {
     return toActionError(e);
   }
-  redirect(`/requests/${id}/credit-check`);
+  redirect(creditCheckActive() ? `/requests/${id}/credit-check` : `/requests/${id}/edit`);
 }
 
 interface DraftPayload {

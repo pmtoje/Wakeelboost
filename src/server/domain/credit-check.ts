@@ -28,7 +28,7 @@ import { storeCreditReport } from "./credit-report";
 export type CreditCheckStatus = "NOT_REQUIRED" | "REQUIRED" | "IN_PROGRESS" | "ACCEPTABLE" | "REVIEW_REQUIRED" | "CLARIFICATION_REQUIRED" | "CLEARED" | "UNAVAILABLE" | "DECLINED";
 
 export const CREDIT_STATUS_LABEL: Record<CreditCheckStatus, string> = {
-  NOT_REQUIRED: "Not required (created before the mandatory credit check)",
+  NOT_REQUIRED: "Credit check not required",
   REQUIRED: "Credit check required",
   IN_PROGRESS: "Credit check in progress",
   ACCEPTABLE: "Cleared to proceed",
@@ -53,9 +53,26 @@ export interface OriginationState {
  * initiator chose "Proceed with Reason" after an adverse result (the Product Manager's review stays
  * open in parallel) and has not yet submitted.
  */
+/**
+ * The mandatory credit check is active only once SeedFi is set up on this server (base URL and
+ * credentials; in production, the live service). Until then requests go straight to the facility
+ * application; when SeedFi is configured, new requests start with the check again automatically.
+ */
+export function creditCheckActive(): boolean {
+  const s = config.seedfi;
+  return s.configured && (!config.isProduction || s.environment === "production");
+}
+export const INACTIVE_NOTE = "SeedFi credit check not active when this request was created";
+
+/** Draft waiting for a check that cannot run while SeedFi is not set up. */
+export function waitingOnInactiveCheck(a: OriginationState): boolean {
+  return a.stage === "DRAFT" && ["REQUIRED", "UNAVAILABLE"].includes(a.credit_check_status ?? "") && !creditCheckActive();
+}
+
 export function originationOpen(a: OriginationState): boolean {
   const st = a.credit_check_status ?? "NOT_REQUIRED";
   if (a.stage === "DRAFT" && ORIGINATION_ALLOWED.includes(st)) return true;
+  if (waitingOnInactiveCheck(a)) return true;
   return !!a.rm_proceeded_at && !a.pm_hold_submitted_at && st !== "DECLINED" && ["DRAFT", "CREDIT_REVIEW", "CREDIT_CLARIFICATION"].includes(a.stage);
 }
 
@@ -392,6 +409,7 @@ export async function updateCreditSettings(ctx: Ctx, p: { minAcceptableScore: nu
 /** The submitted application must describe the customer whose credit was checked. */
 export async function assertCheckedIdentity(tx: Tx, app: { id: string; applicant_type: string; credit_check_status: string; credit_check_id: string | null; rm_proceeded_at?: Date | string | null }, version: { id: string; bvn_enc: string | null }) {
   if (app.credit_check_status === "NOT_REQUIRED") return;
+  if (["REQUIRED", "UNAVAILABLE"].includes(app.credit_check_status) && !creditCheckActive()) return;
   if (!ORIGINATION_ALLOWED.includes(app.credit_check_status) && !app.rm_proceeded_at) throw gate("Complete the SeedFi credit check before submitting the facility application.");
   const check = (await tx.query<CreditCheckRow>("SELECT * FROM credit_checks WHERE id = $1", [app.credit_check_id])).rows[0];
   if (!check) throw gate("No credit check is recorded for this request.");

@@ -22,7 +22,7 @@ import { liveOfferLetter } from "@/server/domain/offer-letters";
 import { archiveFilename } from "@/server/domain/archive";
 import { PricingAssessment, ThresholdChip, pricingOf } from "@/components/PricingAssessment";
 import { CreditCheckResult, CreditStatusChip } from "@/components/CreditCheck";
-import { originationOpen } from "@/server/domain/credit-check";
+import { originationOpen, waitingOnInactiveCheck } from "@/server/domain/credit-check";
 import { bandLabels, e4ToPercent, pricingSettingsAt } from "@/server/domain/pricing";
 
 /** The booked schedule uses a different frequency from the monthly assessment → label as monthly equivalent. */
@@ -276,8 +276,8 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
   const name = (id: string | null) => (id ? c.people[id] ?? "—" : "—");
   return (
     <div className="stack">
-      {app.credit_check_status === "NOT_REQUIRED" ? (
-        app.credit_check_note && <p className="small muted" style={{ margin: 0 }}>Credit check: {app.credit_check_note}.</p>
+      {app.credit_check_status === "NOT_REQUIRED" || waitingOnInactiveCheck(app) ? (
+        (app.credit_check_note || waitingOnInactiveCheck(app)) && <p className="small muted" style={{ margin: 0 }}>Credit check: {waitingOnInactiveCheck(app) ? "SeedFi is not active yet; this request proceeds without it" : app.credit_check_note}.</p>
       ) : (
         <div className="card" style={{ margin: 0 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
