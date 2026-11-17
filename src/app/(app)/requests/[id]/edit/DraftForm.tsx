@@ -29,6 +29,7 @@ export interface DraftFormData {
   amount: string;
   daoCode: string;
   posSerial: string;
+  customerAccount: string;
   tenor: string;
   items: Item[];
   supplierName: string;
@@ -135,6 +136,7 @@ export function DraftForm(props: {
       address: d.address,
       daoCode: d.daoCode,
       posSerial: d.posSerial,
+      customerAccount: d.customerAccount,
       supplierName: d.supplierName,
       supplierAddress: d.supplierAddress,
       supplierPhone: d.supplierPhone,
@@ -268,6 +270,9 @@ export function DraftForm(props: {
           </Field>
           <Field f={f} id="posSerial" label="POS serial number">
             <input id="posSerial" value={d.posSerial} onChange={set("posSerial")} aria-invalid={!!f.posSerial} />
+          </Field>
+          <Field f={f} id="customerAccount" label="Customer's AltBank account number (for the pre-disbursement agreement)">
+            <input id="customerAccount" value={d.customerAccount} onChange={set("customerAccount")} inputMode="numeric" maxLength={10} aria-invalid={!!f.customerAccount} />
           </Field>
         </div>
         <h3 style={{ marginTop: 16 }}>Items to finance</h3>

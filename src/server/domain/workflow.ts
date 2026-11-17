@@ -545,6 +545,10 @@ export async function performTaskAction(ctx: Ctx, input: TaskActionInput): Promi
     if (result.stage === "CLOSED") {
       void kickArchive(result.applicationId).catch((e) => console.error("[archive] inline generation failed", e));
     }
+    if (result.stage === "VENDOR_CONFIRMATION" && process.env.OFFER_AUTOGEN_INLINE !== "false") {
+      // The bank has paid the vendor: prepare the Murabaha sale contract for signing.
+      void import("./disbursement-docs").then((m) => m.prefillForms(result.applicationId)).catch((e) => console.error("[forms] sale contract prefill failed", e));
+    }
     if (result.stage === "OFFER_PREPARATION") {
       // Issue the Murabaha letter straight away; the worker retries if this attempt fails.
       void kickOfferLetter(result.applicationId).catch((e) => console.error("[offer-letter] inline generation failed", e));

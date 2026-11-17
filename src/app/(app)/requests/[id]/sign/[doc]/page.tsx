@@ -7,7 +7,7 @@ import { DomainError } from "@/server/errors";
 import { getCase } from "@/server/domain/views";
 import { signDocumentLink } from "@/server/domain/documents";
 import { liveOfferLetter } from "@/server/domain/offer-letters";
-import { DOC_LABEL, DOC_SLUGS, FORMS, requiredSigners } from "@/server/domain/disbursement-docs";
+import { DOC_LABEL, DOC_SLUGS, FORMS, requiredSigners, signStageOf } from "@/server/domain/disbursement-docs";
 import { PageHeader } from "@/components/PageHeader";
 import { SignForm, type SignerSlot } from "./SignForm";
 
@@ -29,7 +29,7 @@ export default async function SignPage({ params }: { params: Promise<{ id: strin
   }
   const app = c.app;
   const task = (c.tasks as { status: string; stage: string; assignee_id: string }[]).find((t) => t.status === "OPEN");
-  if (!task || task.stage !== "OFFER_PREPARATION" || task.assignee_id !== session.staffId) redirect(`/requests/${id}`);
+  if (!task || task.stage !== signStageOf(docType) || task.assignee_id !== session.staffId) redirect(`/requests/${id}`);
 
   // The prepared document the customer reads and signs
   let pdfId: string | null = null;
@@ -53,7 +53,7 @@ export default async function SignPage({ params }: { params: Promise<{ id: strin
       <>
         <PageHeader eyebrow={`${app.ref} · ${app.customer_name}`} title={`Sign the ${label.toLowerCase().replace("murabaha", "Murabaha")}`} />
         <div className="card stack">
-          <p style={{ margin: 0 }}>There is no prepared {label.toLowerCase().replace("murabaha", "Murabaha")} to sign yet. {docType === "OFFER_LETTER" ? "The offer letter is issued automatically after Divisional Head approval." : "Prepare the forms from the request, or upload the bank's signed form."}</p>
+          <p style={{ margin: 0 }}>There is no prepared {label.toLowerCase().replace("murabaha", "Murabaha")} to sign yet. {docType === "OFFER_LETTER" ? "The offer letter is issued automatically after Divisional Head approval." : docType === "POST_DISBURSEMENT" ? "The sale contract is prepared once the request reaches vendor payment confirmation." : "Prepare the forms from the request, or upload the bank's signed form."}</p>
           <div>{back}</div>
         </div>
       </>

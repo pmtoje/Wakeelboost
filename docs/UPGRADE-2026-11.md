@@ -78,7 +78,13 @@ not received.
 - **Sign on a tablet.** At offer pack preparation the initiator opens *Sign on tablet* for any prepared document. The customer reads it on screen (or downloads it), then the customer and witness sign with a finger or stylus (Corporate: one or two authorised signatories with designations). The signed copy is the prepared document plus an electronic signature page carrying the signatures, the names and witness details, the time, who captured it, the device and the SHA-256 checksum of the exact document presented. It is filed as the signed pack document (the signed offer letter records customer acceptance), stored in `e_signatures` and audited as `DOCUMENT_SIGNED_ON_TABLET`.
 - **Download / preview / re-upload.** Every prepared and signed copy can be previewed or downloaded from the action panel. A paper-signed copy can always be uploaded instead; it replaces the previous signed copy and every version is kept.
 - **Production** needs LibreOffice for the signed PDF (as for offer letters).
-- **Pending from the bank:** the Word templates for the pre-disbursement agreement, GSI form and insurance form. Upload them under Offer and form templates, approve and activate.
+- **Bank agreements installed (17 Nov 2026).** From the bank's Word files, converted by `scripts/build-agreement-templates.py` into `templates/agreements/` and seeded active and approved (run `npm run seed`; it adds them once, matched by source file):
+  - *Murabaha pre-disbursement agreement*: Individual, Enterprise and Company. Prepared with the offer letter and signed at offer pack preparation.
+  - *Murabaha (sale) contract, post-disbursement (MetLaw edits)*: Individual and Enterprise, with Appendix A (receipt of asset). Prepared when the request reaches **vendor payment confirmation** (the bank has paid the vendor and owns the goods) and signed there by the initiator with the customer. The worker retries preparation if it fails.
+  - Filled from the facility record: agreement date, offer letter date, customer party (name, trading name, address / company), goods, cost price, contract (sale) price, markup, monthly instalment, tenor, asset table (three lines; extra lines combined into the third) and the customer's AltBank account (new optional field on the application; a dotted line when not captured).
+  - Left for completion by hand: the security deposit (Hamish Jiddiyah) amount and percentage, and the bank's signatories (Name / Title). Witnesses sign on the tablet signature page.
+- **Still not supplied:** a Company sale contract, the GSI form and the customer insurance (Takaful) form. Those rows show "No bank template · upload the signed form" until a template is uploaded under Offer and form templates, approved and activated.
+- One active template per document and applicant type (migration 013 updates the unique index and adds the sale-contract document type).
 
 ## Before production
 

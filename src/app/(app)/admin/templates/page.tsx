@@ -52,7 +52,7 @@ export default async function Templates() {
           );
         })}
       </div>
-      <div className="grid-3" style={{ marginBottom: 16 }}>
+      <div className="grid-2" style={{ marginBottom: 16 }}>
         {FORM_DOCS.map(([d, label]) => {
           const a = rows.filter((r) => r.status === "ACTIVE" && r.doc_type === d);
           return (
@@ -143,13 +143,13 @@ export default async function Templates() {
   );
 }
 
-const FORM_DOCS: [string, string][] = [["PRE_DISBURSEMENT", "Pre-disbursement agreement"], ["GSI_FORM", "GSI form"], ["INSURANCE_SIGNED", "Insurance (Takaful) form"]];
+const FORM_DOCS: [string, string][] = [["PRE_DISBURSEMENT", "Pre-disbursement agreement"], ["POST_DISBURSEMENT", "Murabaha sale contract (post-disbursement)"], ["GSI_FORM", "GSI form"], ["INSURANCE_SIGNED", "Insurance (Takaful) form"]];
 const DOC_TYPE_LABEL: Record<string, string> = { OFFER_LETTER: "Murabaha offer letter", ...Object.fromEntries(FORM_DOCS) };
 
 function variableSummary(r: { variables: string[] | null; applicant_type: string | null; format: string; doc_type: string }) {
   if (r.format !== "DOCX") return <span className="muted">HTML</span>;
   if (!r.variables) return <span className="muted">Not recorded</span>;
-  const req = r.doc_type !== "OFFER_LETTER" ? REQUIRED_FORM_PLACEHOLDERS : r.applicant_type ? REQUIRED_DOCX_PLACEHOLDERS[r.applicant_type as ApplicantType] : [];
+  const req = r.doc_type !== "OFFER_LETTER" ? REQUIRED_FORM_PLACEHOLDERS.filter(() => !["customer_name", "proprietor_name", "company_name"].some((n) => r.variables!.includes(n))) : r.applicant_type ? REQUIRED_DOCX_PLACEHOLDERS[r.applicant_type as ApplicantType] : [];
   const missing = req.filter((x) => !r.variables!.includes(x));
   const unknown = r.variables.filter((x) => !KNOWN_DOCX_PLACEHOLDERS.has(x));
   if (missing.length || unknown.length) return <span className="badge badge-red">{missing.length} missing · {unknown.length} unknown</span>;

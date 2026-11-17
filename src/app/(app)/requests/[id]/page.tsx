@@ -8,7 +8,7 @@ import { getCase } from "@/server/domain/views";
 import { signDocumentLink, RESTRICTED_CREDIT_CATEGORIES, CATEGORY_LABEL, DOC_CATEGORIES, UPLOADABLE_BY_STAGE, PACK, type DocumentRow } from "@/server/domain/documents";
 import { STAGE_LABELS, ACTION_LABELS, allowedActions, type Stage, type TaskAction } from "@/server/domain/stages";
 import { ROLE_LABELS, type Role } from "@/server/domain/roles";
-import { APPLICANT_TYPE_LABELS, assetCostKobo, type DraftData } from "@/server/domain/application-data";
+import { APPLICANT_TYPE_LABELS, assetCostKobo, type ApplicantType, type DraftData } from "@/server/domain/application-data";
 import { getRoute } from "@/server/domain/routing";
 import { activeCalculator, calculatorKey, findCalculator } from "@/server/domain/apr/registry";
 import { REMINDER_MIN_AGE_MS } from "@/server/domain/workflow";
@@ -19,7 +19,7 @@ import { config } from "@/server/config";
 import { StageChip, OutcomeChip } from "@/components/Status";
 import { activeTemplate } from "@/server/domain/offer";
 import { liveOfferLetter } from "@/server/domain/offer-letters";
-import { FORMS } from "@/server/domain/disbursement-docs";
+import { formsForStage, type FormSpec } from "@/server/domain/disbursement-docs";
 import { archiveFilename } from "@/server/domain/archive";
 import { PricingAssessment, ThresholdChip, pricingOf } from "@/components/PricingAssessment";
 import { CreditCheckResult, CreditStatusChip } from "@/components/CreditCheck";
@@ -374,6 +374,7 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
               <tr><th>Tenor</th><td>{data.tenorMonths ? `${data.tenorMonths} months` : "—"}</td></tr>
               <tr><th>DAO code</th><td className="mono">{data.daoCode || "—"}</td></tr>
               <tr><th>POS serial number</th><td className="mono">{data.posSerial || "—"}</td></tr>
+              <tr><th>Customer AltBank account</th><td className="mono">{data.customerAccount || "—"}</td></tr>
               <tr><th>Rental coverage</th><td>{data.rentStart ? `${formatDateOnly(data.rentStart)} – ${formatDateOnly(data.rentEnd)}` : "—"}</td></tr>
               <tr><th>12-month statements confirmed</th><td>{data.statementsCover12Months ? "Yes" : "No"}</td></tr>
             </tbody>
@@ -1005,58 +1006,7 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
           docxHref={docxDoc ? `/requests/${app.id}?tab=documents&doc=${docxDoc.id}` : null}
         />,
       );
-      {
-        // Disbursement documents: prepared (prefilled) copy, signing status, sign on the tablet, or upload a signed copy.
-        const view = (docId: string) => `/requests/${app.id}?tab=documents&doc=${docId}`;
-        const rows = [
-          { slug: "offer-letter", label: "Murabaha offer letter", pdf: pdfDoc, word: docxDoc, signedCat: "SIGNED_OFFER", template: !!tpl },
-          ...(await Promise.all(
-            FORMS.map(async (f) => ({
-              slug: f.slug,
-              label: f.label,
-              pdf: docs.find((d) => d.category === f.prefillPdfCategory),
-              word: docs.find((d) => d.category === f.prefillCategory),
-              signedCat: f.signedCategory,
-              template: !!(await activeTemplate(db, app.applicant_type, f.docType)),
-            })),
-          )),
-        ];
-        body.push(
-          <div key="docs" className="summary-box small">
-            <p className="eyebrow">Disbursement documents</p>
-            <div className="table-wrap">
-              <table className="data doc-table">
-                <thead><tr><th>Document</th><th>Prepared copy</th><th>Signed copy</th><th></th></tr></thead>
-                <tbody>
-                  {rows.map((r) => {
-                    const s = docs.find((d) => d.category === r.signedCat);
-                    return (
-                      <tr key={r.slug}>
-                        <td>{r.label}</td>
-                        <td>
-                          {r.word ? (
-                            <>
-                              {r.pdf && <Link href={view(r.pdf.id)}><Eye className="icon" aria-hidden="true" /> Preview</Link>}
-                              {r.pdf && " · "}
-                              <Link href={view(r.word.id)}><Download className="icon" aria-hidden="true" /> Word</Link>
-                            </>
-                          ) : (
-                            <span className="muted">{r.template ? "Not prepared yet" : "No bank template · upload the signed form"}</span>
-                          )}
-                        </td>
-                        <td>{s ? <><CheckCircle2 className="icon" aria-hidden="true" /> <Link href={view(s.id)}>v{s.version_no}</Link> · {formatLagos(s.uploaded_at)}</> : <span className="muted">Not signed</span>}</td>
-                        <td>{r.word && <Link className="btn btn-sm" href={`/requests/${app.id}/sign/${r.slug}`}>{s ? "Sign again" : "Sign on tablet"}</Link>}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="muted" style={{ margin: "6px 0 0" }}>Sign on the tablet, or download, sign on paper and upload the signed copy below. A new upload or signing replaces the previous signed copy; every version is kept.</p>
-            {rows.some((r) => r.slug !== "offer-letter" && r.template) && <PrefillFormsButton applicationId={app.id} />}
-          </div>,
-        );
-      }
+      body.push(await DisbursementDocs({ key: "docs", appId: app.id, applicantType: app.applicant_type, docs, forms: formsForStage("OFFER_PREPARATION"), offer: { pdf: pdfDoc, word: docxDoc, template: !!tpl } }));
       if (signed.length)
         body.push(
           <div key="versions" className="small">
@@ -1104,6 +1054,8 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
       break;
     case "VENDOR_CONFIRMATION":
       body.push(<p key="t" className="small" style={{ margin: 0 }}>Confirm the vendor has been paid. This closes the request and activates repayment prompts.</p>);
+      body.push(await DisbursementDocs({ key: "docs", appId: app.id, applicantType: app.applicant_type, docs, forms: formsForStage("VENDOR_CONFIRMATION"), note: "The bank has paid the vendor, so it now owns the goods. The customer signs the Murabaha sale contract (with the receipt of asset in Appendix A) to buy them from the bank on instalments." }));
+      body.push(<UploadPanel key="u" compact applicationId={app.id} title="Upload signed sale contract" categories={["POST_DISBURSEMENT", "SUPPORTING"].map((x) => ({ code: x, label: CATEGORY_LABEL[x] }))} />);
       body.push(<TaskButton key="v" hidden={hidden} action="CONFIRM_VENDOR_PAYMENT" label="Confirm vendor payment and end of process" confirm="Confirm that the vendor has been paid and close this request?" doneHref={doneHref} />);
       break;
   }
@@ -1145,3 +1097,57 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
   );
 }
 
+
+/** Disbursement documents: prepared (prefilled) copy, signing status, sign on the tablet, or upload a signed copy. */
+async function DisbursementDocs(p: { key: string; appId: string; applicantType: ApplicantType; docs: DocumentRow[]; forms: FormSpec[]; offer?: { pdf?: DocumentRow; word?: DocumentRow; template: boolean }; note?: string }) {
+  const view = (docId: string) => `/requests/${p.appId}?tab=documents&doc=${docId}`;
+  const rows = [
+    ...(p.offer ? [{ slug: "offer-letter", label: "Murabaha offer letter", pdf: p.offer.pdf, word: p.offer.word, signedCat: "SIGNED_OFFER", template: p.offer.template }] : []),
+    ...(await Promise.all(
+      p.forms.map(async (f) => ({
+        slug: f.slug,
+        label: f.label,
+        pdf: p.docs.find((d) => d.category === f.prefillPdfCategory),
+        word: p.docs.find((d) => d.category === f.prefillCategory),
+        signedCat: f.signedCategory,
+        template: !!(await activeTemplate(db, p.applicantType, f.docType)),
+      })),
+    )),
+  ];
+  return (
+    <div key={p.key} className="summary-box small">
+      <p className="eyebrow">{p.offer ? "Disbursement documents" : "Murabaha sale contract"}</p>
+      {p.note && <p style={{ margin: "0 0 8px" }}>{p.note}</p>}
+      <div className="table-wrap">
+        <table className="data doc-table">
+          <thead><tr><th>Document</th><th>Prepared copy</th><th>Signed copy</th><th><span className="sr-only">Actions</span></th></tr></thead>
+          <tbody>
+            {rows.map((r) => {
+              const s = p.docs.find((d) => d.category === r.signedCat);
+              return (
+                <tr key={r.slug}>
+                  <td>{r.label}</td>
+                  <td>
+                    {r.word ? (
+                      <>
+                        {r.pdf && <Link href={view(r.pdf.id)}><Eye className="icon" aria-hidden="true" /> Preview</Link>}
+                        {r.pdf && " · "}
+                        <Link href={view(r.word.id)}><Download className="icon" aria-hidden="true" /> Word</Link>
+                      </>
+                    ) : (
+                      <span className="muted">{r.template ? "Not prepared yet" : "No bank template · upload the signed form"}</span>
+                    )}
+                  </td>
+                  <td>{s ? <><CheckCircle2 className="icon" aria-hidden="true" /> <Link href={view(s.id)}>v{s.version_no}</Link> · {formatLagos(s.uploaded_at)}</> : <span className="muted">Not signed</span>}</td>
+                  <td>{r.word && <Link className="btn btn-sm" href={`/requests/${p.appId}/sign/${r.slug}`}>{s ? "Sign again" : "Sign on tablet"}</Link>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted" style={{ margin: "6px 0 0" }}>Sign on the tablet, or download, sign on paper and upload the signed copy. A new upload or signing replaces the previous signed copy; every version is kept.</p>
+      {rows.some((r) => r.slug !== "offer-letter" && r.template) && <PrefillFormsButton applicationId={p.appId} />}
+    </div>
+  );
+}

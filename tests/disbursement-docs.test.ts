@@ -8,8 +8,8 @@ import { NAIRA } from "@/server/money";
 import { readDocumentForActor, uploadDocument } from "@/server/domain/documents";
 import { activateTemplate, createDocxTemplateVersion } from "@/server/domain/admin";
 import { liveOfferLetter, processDueOfferLetters } from "@/server/domain/offer-letters";
-import { prefillForms, prefillFormsNow, signOnTablet, requiredSigners } from "@/server/domain/disbursement-docs";
-import { createSubmittedCase, ctxFor, driveToOffer, makePdf } from "@/server/demo/scenario";
+import { prefillForms, prefillFormsNow, processDueSaleContracts, signOnTablet, requiredSigners } from "@/server/domain/disbursement-docs";
+import { act, createSubmittedCase, ctxFor, driveToOffer, makePdf, openTaskOf } from "@/server/demo/scenario";
 import { audits, resetDb } from "./helpers";
 
 beforeEach(async () => {
@@ -47,7 +47,7 @@ async function docText(docId: string, email: string) {
   return { zip: z, text: (await z.file("word/document.xml")!.async("string")).replace(/<\/w:p>/g, "\n").replace(/<[^>]+>/g, "") };
 }
 
-async function offerReady(type: "INDIVIDUAL" | "LIMITED" = "INDIVIDUAL") {
+async function offerReady(type: "INDIVIDUAL" | "ENTERPRISE" | "LIMITED" = "INDIVIDUAL") {
   const id = await createSubmittedCase({ initiator: "RM", type, amountKobo: NAIRA(2_000_000) });
   await driveToOffer(id);
   await processDueOfferLetters();
@@ -65,19 +65,48 @@ async function installFormTemplate(docType: "PRE_DISBURSEMENT" | "GSI_FORM", app
 const RM = "rm.ade@altbank.ng";
 
 describe("disbursement documents", () => {
-  it("prefills each bank form that has an active template, and skips the rest", async () => {
-    await installFormTemplate("PRE_DISBURSEMENT");
+  it("prepares the bank's pre-disbursement agreement with the letter, filled from the facility record", async () => {
     const id = await offerReady();
     const r = await prefillForms(id);
-    // Already prepared alongside the offer letter: nothing new to do.
-    expect(r.skipped).toEqual(["PRE_DISBURSEMENT"]);
+    // Already prepared alongside the offer letter: nothing new to do. The sale contract waits for vendor payment.
+    expect(r.skipped.sort()).toEqual(["POST_DISBURSEMENT", "PRE_DISBURSEMENT"]);
     expect(r.missingTemplate.sort()).toEqual(["GSI_FORM", "INSURANCE_SIGNED"]);
     const doc = (await db.query("SELECT * FROM documents WHERE application_id = $1 AND category = 'PREFILLED_PRE_DISBURSEMENT'", [id])).rows[0];
     expect(doc.filename).toMatch(/^Pre-disbursement/);
-    const app = (await db.query("SELECT ref, customer_name FROM applications WHERE id = $1", [id])).rows[0];
+    const app = (await db.query("SELECT customer_name FROM applications WHERE id = $1", [id])).rows[0];
+    const asmt = (await db.query("SELECT a.* FROM credit_assessments a JOIN offer_letters l ON l.assessment_id = a.id WHERE l.application_id = $1", [id])).rows[0];
     const { text } = await docText(doc.id, RM);
+    const N = (k: number | string) => `N${(Number(k) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
     expect(text).toContain(app.customer_name);
+    expect(text).toContain(N(NAIRA(2_000_000)));
+    expect(text).toContain(N(asmt.cost_plus_markup_kobo));
+    expect(text).toContain(N(asmt.markup_kobo));
+    expect(text).toMatch(/OFFER LETTER dated the \d+(st|nd|rd|th) day of \w+ 20\d\d/);
+    expect(text).toContain("HAMISH JIDDIYAH"); // bank wording unchanged; deposit left for completion by hand
+    expect(text).not.toMatch(/\{\{/);
     expect((await audits("FORM_PREFILLED")).length).toBe(1);
+  });
+
+  it("uses the Enterprise and Company agreements for those applicant types", async () => {
+    const ent = await offerReady("ENTERPRISE");
+    const e = (await db.query("SELECT d.id, v.data FROM documents d JOIN applications a ON a.id = d.application_id JOIN application_versions v ON v.id = a.current_version_id WHERE d.application_id = $1 AND d.category = 'PREFILLED_PRE_DISBURSEMENT'", [ent])).rows[0];
+    const et = (await docText(e.id, RM)).text;
+    expect(et).toContain(`${e.data.customerName} (trading in the Name and Style of ${e.data.businessName})`);
+    const co = await offerReady("LIMITED");
+    const c = (await db.query("SELECT d.id, v.data FROM documents d JOIN applications a ON a.id = d.application_id JOIN application_versions v ON v.id = a.current_version_id WHERE d.application_id = $1 AND d.category = 'PREFILLED_PRE_DISBURSEMENT'", [co])).rows[0];
+    const ct = (await docText(c.id, RM)).text;
+    expect(ct).toContain(`SIGNED FOR AND ON BEHALF OF ${c.data.companyName}`);
+  });
+
+  it("prints the customer's AltBank account when captured, a dotted line when not", async () => {
+    const id = await offerReady();
+    const doc = (await db.query("SELECT id FROM documents WHERE application_id = $1 AND category = 'PREFILLED_PRE_DISBURSEMENT'", [id])).rows[0];
+    expect((await docText(doc.id, RM)).text).toMatch(/Account No\. …+/);
+    await db.query("UPDATE application_versions SET data = data || '{\"customerAccount\":\"0123456789\"}' WHERE id = (SELECT current_version_id FROM applications WHERE id = $1)", [id]);
+    await db.query("UPDATE documents SET superseded_at = now() WHERE application_id = $1 AND category LIKE 'PREFILLED_%'", [id]);
+    await prefillForms(id);
+    const fresh = (await db.query("SELECT id FROM documents WHERE application_id = $1 AND category = 'PREFILLED_PRE_DISBURSEMENT' AND superseded_at IS NULL", [id])).rows[0];
+    expect((await docText(fresh.id, RM)).text.match(/0123456789/g)).toHaveLength(2);
   });
 
   it("only lets the initiator holding offer preparation prepare forms or sign", async () => {
@@ -138,7 +167,7 @@ describe("disbursement documents", () => {
     await installFormTemplate("GSI_FORM");
     const id = await offerReady();
     const ctx = await ctxFor(RM);
-    await expect(signOnTablet(ctx, id, "PRE_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/no prepared/i);
+    await expect(signOnTablet(ctx, id, "INSURANCE_SIGNED", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/no prepared/i);
     const r = await signOnTablet(ctx, id, "GSI_FORM", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }]);
     expect((await db.query("SELECT category FROM documents WHERE id = $1", [r.documentId])).rows[0].category).toBe("GSI_FORM");
     await uploadDocument(ctx, { applicationId: id, category: "GSI_FORM", filename: "gsi-paper.pdf", data: makePdf("GSI signed on paper") });
@@ -160,4 +189,57 @@ describe("disbursement documents", () => {
     const data = await z.generateAsync({ type: "nodebuffer" });
     await expect(createDocxTemplateVersion(await ctxFor("superadmin@altbank.ng"), { name: "Bad form", applicantType: "ALL", docType: "GSI_FORM", filename: "f.docx", data, productionApproved: true })).rejects.toThrow(/interest/i);
   });
+
+  it("prepares the Murabaha sale contract only after the vendor is paid, and the initiator signs it there", async () => {
+    const id = await offerReady();
+    const ctx = await ctxFor(RM);
+    await expect(signOnTablet(ctx, id, "POST_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/vendor payment confirmation/);
+    expect((await db.query("SELECT count(*)::int AS n FROM documents WHERE application_id = $1 AND category = 'PREFILLED_POST_DISBURSEMENT'", [id])).rows[0].n).toBe(0);
+    await driveToVendorConfirmation(id);
+    // The worker prepares it (inline generation is off in tests).
+    expect(await processDueSaleContracts()).toBe(1);
+    expect(await processDueSaleContracts()).toBe(0);
+    const doc = (await db.query("SELECT id FROM documents WHERE application_id = $1 AND category = 'PREFILLED_POST_DISBURSEMENT'", [id])).rows[0];
+    const { text } = await docText(doc.id, RM);
+    const items = (await db.query("SELECT v.data FROM applications a JOIN application_versions v ON v.id = a.current_version_id WHERE a.id = $1", [id])).rows[0].data.items;
+    expect(text).toContain(items[0].description);
+    expect(text).toMatch(/Tenor- \d+ months/);
+    expect(text).toContain("RECEIPT OF ASSET");
+    expect(text).not.toMatch(/\{\{/);
+    const s = await signOnTablet(ctx, id, "POST_DISBURSEMENT", [
+      { role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() },
+      { role: "WITNESS", name: "Kemi Adeyemi", signaturePng: signaturePng() },
+    ]);
+    expect((await db.query("SELECT category FROM documents WHERE id = $1", [s.documentId])).rows[0].category).toBe("POST_DISBURSEMENT");
+    // Offer-stage documents can no longer be signed
+    await expect(signOnTablet(ctx, id, "PRE_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/offer pack preparation/);
+  });
+
+  it("the bank's agreement templates are seeded active and approved", async () => {
+    const rows = (await db.query("SELECT doc_type, applicant_type, production_approved, status FROM offer_templates WHERE doc_type <> 'OFFER_LETTER' ORDER BY doc_type, applicant_type")).rows;
+    expect(rows).toEqual([
+      { doc_type: "POST_DISBURSEMENT", applicant_type: "ENTERPRISE", production_approved: true, status: "ACTIVE" },
+      { doc_type: "POST_DISBURSEMENT", applicant_type: "INDIVIDUAL", production_approved: true, status: "ACTIVE" },
+      { doc_type: "PRE_DISBURSEMENT", applicant_type: "ENTERPRISE", production_approved: true, status: "ACTIVE" },
+      { doc_type: "PRE_DISBURSEMENT", applicant_type: "INDIVIDUAL", production_approved: true, status: "ACTIVE" },
+      { doc_type: "PRE_DISBURSEMENT", applicant_type: "LIMITED", production_approved: true, status: "ACTIVE" },
+    ]);
+  });
 });
+
+async function driveToVendorConfirmation(id: string) {
+  const t = await openTaskOf(id);
+  const ctx = await ctxFor(t.email!);
+  for (const c of ["SIGNED_OFFER", "KYC", "PRE_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED"]) await uploadDocument(ctx, { applicationId: id, category: c, filename: `${c}.pdf`, data: makePdf(c) });
+  await act(id, "SUBMIT_PACK");
+  const co3 = await ctxFor((await openTaskOf(id)).email!);
+  await uploadDocument(co3, { applicationId: id, category: "INSURANCE_EVIDENCE", filename: "ev.pdf", data: makePdf("evidence") });
+  await act(id, "FORWARD");
+  await act(id, "OKAY", { crmsLogged: true });
+  const app = (await db.query("SELECT requested_amount_kobo FROM applications WHERE id = $1", [id])).rows[0];
+  const today = new Date().toISOString().slice(0, 10);
+  const due = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  await act(id, "DISBURSED", { booking: { amountKobo: Number(app.requested_amount_kobo), disbursedOn: today, transactionRef: `TRX${Date.now()}`, schedule: [{ dueDate: due, amountKobo: Number(app.requested_amount_kobo) }] } });
+  await act(id, "COMPLETE_PROCESS");
+  expect((await openTaskOf(id)).stage).toBe("VENDOR_CONFIRMATION");
+}

@@ -35,6 +35,9 @@ export const DOC_CATEGORIES: DocCategory[] = [
   { code: "INSURANCE_EVIDENCE", label: "Evidence of insurance (Credit Officer 3)", multiple: false },
   { code: "SUPPORTING", label: "Other supporting document", multiple: true },
   { code: "SEEDFI_CREDIT_REPORT", label: "SeedFi credit check report", multiple: false },
+  { code: "POST_DISBURSEMENT", label: "Murabaha sale contract (signed, post-disbursement)", multiple: false },
+  { code: "PREFILLED_POST_DISBURSEMENT", label: "Murabaha sale contract (prepared, unsigned · Word)", multiple: false },
+  { code: "PREFILLED_POST_DISBURSEMENT_PDF", label: "Murabaha sale contract (prepared, unsigned · PDF)", multiple: false },
   { code: "PREFILLED_PRE_DISBURSEMENT", label: "Pre-disbursement agreement (prepared, unsigned · Word)", multiple: false },
   { code: "PREFILLED_PRE_DISBURSEMENT_PDF", label: "Pre-disbursement agreement (prepared, unsigned · PDF)", multiple: false },
   { code: "PREFILLED_GSI_FORM", label: "GSI form (prepared, unsigned · Word)", multiple: false },
@@ -61,6 +64,7 @@ export const UPLOADABLE_BY_STAGE: Partial<Record<Stage, string[]>> = {
   OFFER_PREPARATION: [...PACK, "SUPPORTING"],
   CO3_PACK_REVIEW: ["INSURANCE_EVIDENCE", "SUPPORTING"],
   DISBURSEMENT_CORRECTION: ["INSURANCE_EVIDENCE", ...PACK, "SUPPORTING"],
+  VENDOR_CONFIRMATION: ["POST_DISBURSEMENT", "SUPPORTING"],
 };
 
 export interface DocumentRow {

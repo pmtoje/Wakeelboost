@@ -38,12 +38,23 @@ export interface FormSpec {
   prefillPdfCategory: string; // PDF copy (preview / download)
   signedCategory: string; // pack category the signed copy satisfies
   filePrefix: string;
+  /** Workflow stage at which the initiator prepares and signs this document. */
+  signStage: "OFFER_PREPARATION" | "VENDOR_CONFIRMATION";
 }
 export const FORMS: FormSpec[] = [
-  { docType: "PRE_DISBURSEMENT", label: "Pre-disbursement agreement", slug: "pre-disbursement", prefillCategory: "PREFILLED_PRE_DISBURSEMENT", prefillPdfCategory: "PREFILLED_PRE_DISBURSEMENT_PDF", signedCategory: "PRE_DISBURSEMENT", filePrefix: "Pre-disbursement" },
-  { docType: "GSI_FORM", label: "GSI form", slug: "gsi-form", prefillCategory: "PREFILLED_GSI_FORM", prefillPdfCategory: "PREFILLED_GSI_FORM_PDF", signedCategory: "GSI_FORM", filePrefix: "GSI-form" },
-  { docType: "INSURANCE_SIGNED", label: "Customer insurance (Takaful) form", slug: "insurance", prefillCategory: "PREFILLED_INSURANCE", prefillPdfCategory: "PREFILLED_INSURANCE_PDF", signedCategory: "INSURANCE_SIGNED", filePrefix: "Insurance-form" },
+  { docType: "PRE_DISBURSEMENT", label: "Pre-disbursement agreement", slug: "pre-disbursement", prefillCategory: "PREFILLED_PRE_DISBURSEMENT", prefillPdfCategory: "PREFILLED_PRE_DISBURSEMENT_PDF", signedCategory: "PRE_DISBURSEMENT", filePrefix: "Pre-disbursement", signStage: "OFFER_PREPARATION" },
+  { docType: "GSI_FORM", label: "GSI form", slug: "gsi-form", prefillCategory: "PREFILLED_GSI_FORM", prefillPdfCategory: "PREFILLED_GSI_FORM_PDF", signedCategory: "GSI_FORM", filePrefix: "GSI-form", signStage: "OFFER_PREPARATION" },
+  { docType: "INSURANCE_SIGNED", label: "Customer insurance (Takaful) form", slug: "insurance", prefillCategory: "PREFILLED_INSURANCE", prefillPdfCategory: "PREFILLED_INSURANCE_PDF", signedCategory: "INSURANCE_SIGNED", filePrefix: "Insurance-form", signStage: "OFFER_PREPARATION" },
+  // Signed once the bank has paid the vendor: the bank then owns the goods and sells them to the customer.
+  { docType: "POST_DISBURSEMENT", label: "Murabaha sale contract", slug: "sale-contract", prefillCategory: "PREFILLED_POST_DISBURSEMENT", prefillPdfCategory: "PREFILLED_POST_DISBURSEMENT_PDF", signedCategory: "POST_DISBURSEMENT", filePrefix: "Murabaha-sale-contract", signStage: "VENDOR_CONFIRMATION" },
 ];
+/** Documents signed at a stage (the offer letter is signed at offer preparation). */
+export function formsForStage(stage: string): FormSpec[] {
+  return FORMS.filter((f) => f.signStage === stage);
+}
+export function signStageOf(docType: DisbursementDoc): string {
+  return docType === "OFFER_LETTER" ? "OFFER_PREPARATION" : (FORMS.find((f) => f.docType === docType)?.signStage ?? "OFFER_PREPARATION");
+}
 export const DOC_SLUGS: Record<string, DisbursementDoc> = { "offer-letter": "OFFER_LETTER", ...Object.fromEntries(FORMS.map((f) => [f.slug, f.docType])) };
 export const DOC_LABEL: Record<DisbursementDoc, string> = { OFFER_LETTER: "Murabaha offer letter", ...Object.fromEntries(FORMS.map((f) => [f.docType, f.label])) } as Record<DisbursementDoc, string>;
 
@@ -58,7 +69,10 @@ export async function prefillForms(appId: string, now = new Date()): Promise<{ p
       await withTx(async (tx) => {
         const app = (await tx.query("SELECT * FROM applications WHERE id = $1 FOR UPDATE", [appId])).rows[0];
         if (!app) throw notFound();
-        if (!OFFER_STAGES.includes(app.stage)) throw gate("Forms are prepared after Divisional Head approval.");
+        if (f.signStage === "VENDOR_CONFIRMATION" ? app.stage !== "VENDOR_CONFIRMATION" : !OFFER_STAGES.includes(app.stage)) {
+          out.skipped.push(f.docType);
+          return;
+        }
         const tpl = await activeTemplate(tx, app.applicant_type, f.docType);
         if (!tpl || (config.isProduction && !tpl.production_approved)) {
           out.missingTemplate.push(f.docType);
@@ -86,16 +100,20 @@ export async function prefillForms(appId: string, now = new Date()): Promise<{ p
 
 /** Initiator at offer preparation: prepare (or refresh) the prefilled forms now. */
 export async function prefillFormsNow(ctx: Ctx, appId: string) {
-  await assertSigningTask(db, ctx, appId);
+  await assertSigningTask(db, ctx, appId, ["OFFER_PREPARATION", "VENDOR_CONFIRMATION"]);
   return prefillForms(appId, ctx.now);
 }
 
-async function assertSigningTask(q: Db, ctx: Ctx, appId: string) {
+async function assertSigningTask(q: Db, ctx: Ctx, appId: string, stages: string[]) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
   const task = (await q.query("SELECT * FROM tasks WHERE application_id = $1 AND status = 'OPEN'", [appId])).rows[0];
-  if (!task || task.stage !== "OFFER_PREPARATION" || task.assignee_id !== actor.staffId || !(await holdsRole(q, actor.staffId, task.assignee_role))) {
-    throw forbidden("Documents are signed on the tablet by the initiator at offer pack preparation.");
+  if (!task || !stages.includes(task.stage) || task.assignee_id !== actor.staffId || !(await holdsRole(q, actor.staffId, task.assignee_role))) {
+    throw forbidden(
+      stages.length === 1 && stages[0] === "VENDOR_CONFIRMATION"
+        ? "The Murabaha sale contract is signed on the tablet by the initiator at vendor payment confirmation."
+        : "Documents are signed on the tablet by the initiator at offer pack preparation.",
+    );
   }
   return task;
 }
@@ -137,7 +155,7 @@ export async function signOnTablet(ctx: Ctx, appId: string, docType: Disbursemen
     return await withTx(async (tx) => {
       const app = (await tx.query("SELECT * FROM applications WHERE id = $1 FOR UPDATE", [appId])).rows[0];
       if (!app) throw notFound();
-      const task = await assertSigningTask(tx, ctx, appId);
+      const task = await assertSigningTask(tx, ctx, appId, [signStageOf(docType)]);
       // Source document presented to the signer
       let sourceId: string | null = null;
       let signedCategory: string;
@@ -233,4 +251,21 @@ export async function signOnTablet(ctx: Ctx, appId: string, docType: Disbursemen
     if (e instanceof DomainError && e.code === "FORBIDDEN") await auditOutsideTx(ctx, { action: "DOCUMENT_SIGNED_ON_TABLET", outcome: "DENIED", applicationId: appId, reason: e.message, details: { docType } });
     throw e;
   }
+}
+
+/** Worker: prepare the sale contract for requests waiting at vendor payment confirmation (retries failures every 15 minutes). */
+export async function processDueSaleContracts(now = new Date()): Promise<number> {
+  const due = (
+    await db.query<{ id: string }>(
+      `SELECT a.id FROM applications a
+        WHERE a.stage = 'VENDOR_CONFIRMATION'
+          AND EXISTS (SELECT 1 FROM offer_templates t WHERE t.status = 'ACTIVE' AND t.doc_type = 'POST_DISBURSEMENT' AND (t.applicant_type = a.applicant_type OR t.applicant_type IS NULL))
+          AND NOT EXISTS (SELECT 1 FROM documents d WHERE d.application_id = a.id AND d.category = 'PREFILLED_POST_DISBURSEMENT' AND d.superseded_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM audit_events e WHERE e.application_id = a.id AND e.action = 'FORM_PREFILL_FAILED' AND e.occurred_at > $1::timestamptz - interval '15 minutes')
+        LIMIT 20`,
+      [now],
+    )
+  ).rows;
+  for (const r of due) await prefillForms(r.id, now);
+  return due.length;
 }

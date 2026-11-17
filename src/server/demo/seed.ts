@@ -95,6 +95,7 @@ export async function seedReferenceData(q: Db, opts: { includeDemo?: boolean } =
   }
   const tpl = await q.query("SELECT 1 FROM offer_templates");
   if (!tpl.rowCount) await seedOfferTemplates(q);
+  await seedAgreementTemplates(q);
   return ids;
 }
 
@@ -108,6 +109,34 @@ export const BANK_OFFER_TEMPLATES = [
   { type: "ENTERPRISE", file: "murabaha-enterprise.docx", source: "Murabaha-Enterprise-Offer-9-1-24.docx" },
   { type: "LIMITED", file: "murabaha-limited.docx", source: "Murabaha-Corporate-Offer-9-1-24.docx" },
 ] as const;
+
+/**
+ * The bank's Murabaha pre-disbursement agreements (Individual / Enterprise / Company) and Murabaha
+ * sale contracts (post-disbursement, MetLaw edits; Individual / Enterprise) converted to placeholder
+ * templates by scripts/build-agreement-templates.py. Approved for live use on the bank's instruction.
+ * Idempotent: each is added once (matched by source file), so existing installations pick them up.
+ */
+export const BANK_AGREEMENT_TEMPLATES = [
+  { docType: "PRE_DISBURSEMENT", type: "INDIVIDUAL", file: "pre-disbursement-individual.docx", source: "Individual-Murabaha_Pre_disbursement.docx", name: "Murabaha Pre-disbursement Agreement (Individual)" },
+  { docType: "PRE_DISBURSEMENT", type: "ENTERPRISE", file: "pre-disbursement-enterprise.docx", source: "Enterprise-Murabaha_Pre_disbursement.docx", name: "Murabaha Pre-disbursement Agreement (Enterprise)" },
+  { docType: "PRE_DISBURSEMENT", type: "LIMITED", file: "pre-disbursement-limited.docx", source: "Company-Murabaha_Pre_disbursement.docx", name: "Murabaha Pre-disbursement Agreement (Company)" },
+  { docType: "POST_DISBURSEMENT", type: "INDIVIDUAL", file: "sale-contract-individual.docx", source: "Individual-Murabaha_Post_disbursement_Agreement-MetLaw_Edits.docx", name: "Murabaha Sale Contract (Individual)" },
+  { docType: "POST_DISBURSEMENT", type: "ENTERPRISE", file: "sale-contract-enterprise.docx", source: "Enterprise-Murabaha_Post_disbursement-MetLaw_Edits.docx", name: "Murabaha Sale Contract (Enterprise)" },
+] as const;
+
+export async function seedAgreementTemplates(q: Db) {
+  for (const t of BANK_AGREEMENT_TEMPLATES) {
+    if ((await q.query("SELECT 1 FROM offer_templates WHERE source_filename = $1", [t.source])).rowCount) continue;
+    const data = await readFile(path.resolve(process.cwd(), "templates/agreements", t.file));
+    const key = `templates/offer/${randomUUID()}.docx`;
+    await objectStore().put(key, data, DOCX_MIME);
+    await q.query(
+      `INSERT INTO offer_templates (name, version, format, applicant_type, storage_key, source_filename, status, production_approved, notes, activated_at, variables, validated_at, doc_type)
+       VALUES ($1, 1, 'DOCX', $2, $3, $4, 'ACTIVE', true, $5, now(), $6, now(), $7)`,
+      [t.name, t.type, key, t.source, "Bank agreement with WakeelBoost placeholders. Approved for live use on the bank's instruction (17 Nov 2026).", JSON.stringify(await docxPlaceholders(data)), t.docType],
+    );
+  }
+}
 
 export async function seedOfferTemplates(q: Db) {
   for (const t of BANK_OFFER_TEMPLATES) {

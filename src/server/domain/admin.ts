@@ -10,7 +10,7 @@ import { type AppRow, assignmentSpec, eligibleStaff, notifyAssignment } from "./
 import { REGION_REQUIRED_ROLES, SINGLE_HOLDER_ROLES, isRegion, isRole, type Role } from "./roles";
 import type { Stage } from "./stages";
 import { validateTemplate, DOCX_MIME } from "./offer";
-import { assertDocx, docxPlaceholders, validateDocxTemplate, type TemplateDocType } from "./offer-docx";
+import { assertDocx, docxPlaceholders, validateDocxTemplate, type TemplateDocType, TEMPLATE_DOC_TYPES } from "./offer-docx";
 import type { ApplicantType } from "./application-data";
 import { objectStore } from "../storage";
 import { randomUUID } from "node:crypto";
@@ -265,7 +265,7 @@ export type { Role };
 /** Upload a new DOCX offer template version for an applicant type (saved as DRAFT until activated). */
 export async function createDocxTemplateVersion(ctx: Ctx, p: { name: string; applicantType: string; filename: string; data: Buffer; productionApproved: boolean; notes?: string; docType?: string }) {
   const docType = (p.docType || "OFFER_LETTER") as TemplateDocType;
-  if (!["OFFER_LETTER", "PRE_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED"].includes(docType)) throw invalid("Choose the document this template is for.");
+  if (!TEMPLATE_DOC_TYPES.includes(docType)) throw invalid("Choose the document this template is for.");
   // Disbursement forms may apply to every applicant type; offer letters are per type.
   const applicantType = p.applicantType === "ALL" && docType !== "OFFER_LETTER" ? null : p.applicantType;
   if (applicantType !== null && !["INDIVIDUAL", "ENTERPRISE", "LIMITED"].includes(applicantType)) throw invalid("Choose the applicant type this template is for.");

@@ -64,6 +64,8 @@ export const KNOWN_DOCX_PLACEHOLDERS = new Set([
   "instalment_amount", "takaful_rate", "stamp_duty_rate", "bvn", "tin", "first_director_name", "first_director_bvn",
   "director_index", "director_name", "director_bvn", "signatory_1_name", "signatory_1_title", "signatory_2_name", "signatory_2_title",
   "supplier_name", "supplier_address", "supplier_phone", "supplier_account", "invoice_ref", "customer_phone", "customer_email", "pos_serial", "dao_code",
+  "agreement_day", "agreement_month_year", "offer_letter_day", "offer_letter_month_year", "customer_account",
+  "item_1_description", "item_1_units", "item_2_description", "item_2_units", "item_3_description", "item_3_units",
   "#directors_rest", "/directors_rest",
 ]);
 
@@ -104,6 +106,17 @@ export const PLACEHOLDER_SOURCES: Record<string, string> = {
   signatory_1_title: "First signatory title",
   signatory_2_name: "Second signatory (Offer templates settings, or endorser on Corporate letters)",
   signatory_2_title: "Second signatory title",
+  agreement_day: "Day the agreement is prepared, e.g. 17th (Lagos)",
+  agreement_month_year: "Month and year the agreement is prepared, e.g. November 2026",
+  offer_letter_day: "Day the Murabaha offer letter was issued",
+  offer_letter_month_year: "Month and year the offer letter was issued",
+  customer_account: "Customer's AltBank account number (dotted line when not captured)",
+  item_1_description: "Goods line 1 (sale contract asset table)",
+  item_1_units: "Goods line 1 quantity",
+  item_2_description: "Goods line 2",
+  item_2_units: "Goods line 2 quantity",
+  item_3_description: "Goods line 3 (remaining lines combined when there are more than three)",
+  item_3_units: "Goods line 3 quantity",
   "#directors_rest": "Start of repeating director paragraph",
   "/directors_rest": "End of repeating director paragraph",
 };
@@ -120,9 +133,11 @@ export async function docxPlaceholders(buf: Buffer): Promise<string[]> {
   return out;
 }
 
-export type TemplateDocType = "OFFER_LETTER" | "PRE_DISBURSEMENT" | "GSI_FORM" | "INSURANCE_SIGNED";
-/** Placeholders every disbursement form (not the offer letter) must contain. */
+export type TemplateDocType = "OFFER_LETTER" | "PRE_DISBURSEMENT" | "POST_DISBURSEMENT" | "GSI_FORM" | "INSURANCE_SIGNED";
+export const TEMPLATE_DOC_TYPES: TemplateDocType[] = ["OFFER_LETTER", "PRE_DISBURSEMENT", "POST_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED"];
+/** Every disbursement form (not the offer letter) must name the customer with one of these. */
 export const REQUIRED_FORM_PLACEHOLDERS = ["customer_name"];
+const FORM_NAME_PLACEHOLDERS = ["customer_name", "proprietor_name", "company_name"];
 
 /** Validate an uploaded DOCX template: readable, placeholders intact (one run each), required ones present. */
 export async function validateDocxTemplate(buf: Buffer, type: ApplicantType | null, docType: TemplateDocType = "OFFER_LETTER"): Promise<string[]> {
@@ -151,8 +166,9 @@ export async function validateDocxTemplate(buf: Buffer, type: ApplicantType | nu
   if (docType === "OFFER_LETTER" && !/murabaha/i.test(text)) errors.push("This is not a Murabaha offer letter: the wording must name the Murabaha (cost plus markup) structure.");
   if (/interest\s+rate|rate\s+of\s+interest/i.test(text)) errors.push("The letter describes an interest rate. WakeelBoost letters use Murabaha markup terminology only.");
   for (const t of found) if (!KNOWN_DOCX_PLACEHOLDERS.has(t)) errors.push(`Unknown placeholder {{${t}}}.`);
-  const required = docType === "OFFER_LETTER" ? (type ? REQUIRED_DOCX_PLACEHOLDERS[type] : []) : REQUIRED_FORM_PLACEHOLDERS;
+  const required = docType === "OFFER_LETTER" ? (type ? REQUIRED_DOCX_PLACEHOLDERS[type] : []) : [];
   for (const r of required) if (!found.has(r)) errors.push(`Missing placeholder {{${r}}}.`);
+  if (docType !== "OFFER_LETTER" && !FORM_NAME_PLACEHOLDERS.some((r) => found.has(r))) errors.push("Missing placeholder {{customer_name}} (or {{proprietor_name}} / {{company_name}}).");
   if (found.has("#directors_rest") !== found.has("/directors_rest")) errors.push("The {{#directors_rest}} … {{/directors_rest}} markers must both be in the same paragraph.");
   return [...new Set(errors)];
 }

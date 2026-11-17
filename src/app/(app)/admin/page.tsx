@@ -16,7 +16,7 @@ export default async function AdminHome() {
     n("SELECT count(*) AS n FROM notification_outbox WHERE status IN ('FAILED','DEAD')"),
     n("SELECT count(*) AS n FROM recipient_group_members"),
   ]);
-  const tpl = (await db.query("SELECT name, version, production_approved FROM offer_templates WHERE status = 'ACTIVE'")).rows[0];
+  const tpl = (await db.query("SELECT name, version, production_approved FROM offer_templates WHERE status = 'ACTIVE' AND doc_type = 'OFFER_LETTER'")).rows[0];
   const recent = (
     await db.query(
       `SELECT e.occurred_at, e.action, e.actor_email, e.details FROM audit_events e

@@ -69,7 +69,7 @@ describe("automatic Murabaha offer letters", () => {
   });
 
   it("the bank's three Murabaha templates are approved for live use", async () => {
-    const t = (await db.query("SELECT applicant_type, production_approved FROM offer_templates WHERE status = 'ACTIVE' ORDER BY applicant_type")).rows;
+    const t = (await db.query("SELECT applicant_type, production_approved FROM offer_templates WHERE status = 'ACTIVE' AND doc_type = 'OFFER_LETTER' ORDER BY applicant_type")).rows;
     expect(t).toEqual([{ applicant_type: "ENTERPRISE", production_approved: true }, { applicant_type: "INDIVIDUAL", production_approved: true }, { applicant_type: "LIMITED", production_approved: true }]);
   });
 
@@ -93,7 +93,7 @@ describe("automatic Murabaha offer letters", () => {
     // The pack cannot be submitted on a letter that was not issued.
     await expect(act(id, "SUBMIT_PACK")).rejects.toThrow(/has not been issued/);
     const sa = await ctxFor("superadmin@altbank.ng");
-    await approveTemplate(sa, (await db.query("SELECT id FROM offer_templates WHERE status = 'ACTIVE' AND applicant_type = 'INDIVIDUAL'")).rows[0].id);
+    await approveTemplate(sa, (await db.query("SELECT id FROM offer_templates WHERE status = 'ACTIVE' AND doc_type = 'OFFER_LETTER' AND applicant_type = 'INDIVIDUAL'")).rows[0].id);
     const r = await requestOfferLetterNow(await ctxFor("rm.ade@altbank.ng"), id);
     expect(r.templateVersion).toBe(1);
     expect((await liveOfferLetter(db, id))!.status).toBe("ISSUED");

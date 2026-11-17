@@ -149,6 +149,31 @@ export interface OfferData {
   assessment: { inputs: Record<string, unknown>; outputs: Record<string, unknown>; apr_percent: string; markup_kobo: string | number; cost_plus_markup_kobo: string | number };
   people: { initiatorName: string; initiatorTitle: string; endorserName: string; endorserTitle: string; secondSignatoryName?: string; secondSignatoryTitle?: string };
   now: Date;
+  /** When the Murabaha offer letter was issued (agreements refer back to it). Defaults to `now`. */
+  offerIssuedAt?: Date | null;
+}
+
+const BLANK = "……………………………";
+function dayParts(d: Date): [string, string] {
+  const [day, ...rest] = ordinalDate(d).split(" ");
+  return [day, rest.join(" ")];
+}
+/** Up to three goods lines for the sale contract's asset table; extra lines are combined into the third. */
+function itemRows(items: DraftData["items"]): Record<string, string> {
+  const out: Record<string, string> = {};
+  const rows = items.length > 3 ? [...items.slice(0, 2), null] : items;
+  for (let n = 1; n <= 3; n++) {
+    const it = rows[n - 1];
+    if (it === null) {
+      const rest = items.slice(2);
+      out[`item_${n}_description`] = rest.map((r) => `${r.description} (${r.quantity.toLocaleString("en-NG")})`).join("; ");
+      out[`item_${n}_units`] = rest.reduce((a, r) => a + r.quantity, 0).toLocaleString("en-NG");
+    } else {
+      out[`item_${n}_description`] = it?.description ?? "";
+      out[`item_${n}_units`] = it ? it.quantity.toLocaleString("en-NG") : "";
+    }
+  }
+  return out;
 }
 
 /** Values for the bank's DOCX offer letters (see templates/offers and docs/OFFER_TEMPLATES.md). */
@@ -206,6 +231,12 @@ export function offerDocxValues(o: OfferData): { values: Record<string, string>;
     customer_email: o.data.email ?? "",
     pos_serial: o.data.posSerial ?? "",
     dao_code: o.data.daoCode ?? "",
+    agreement_day: dayParts(o.now)[0],
+    agreement_month_year: dayParts(o.now)[1],
+    offer_letter_day: dayParts(o.offerIssuedAt ?? o.now)[0],
+    offer_letter_month_year: dayParts(o.offerIssuedAt ?? o.now)[1],
+    customer_account: o.data.customerAccount || BLANK,
+    ...itemRows(o.data.items),
   };
   return { values, loops: { directors_rest: rest.map((d, i) => ({ director_index: String(i + 2), director_name: d.fullName, director_bvn: d.bvn })) } };
 }
@@ -254,6 +285,7 @@ export async function buildOfferFiles(tx: Db, app: Record<string, unknown> & { i
       assessment: assessment as unknown as OfferData["assessment"],
       people: { initiatorName: nameOf(app.initiator_id), initiatorTitle, endorserName: nameOf(app.endorser_id), endorserTitle: endorserRole, secondSignatoryName: sig.name, secondSignatoryTitle: sig.title },
       now,
+      offerIssuedAt: (await tx.query("SELECT issued_at FROM offer_letters WHERE application_id = $1 AND status = 'ISSUED' ORDER BY issued_at DESC LIMIT 1", [app.id])).rows[0]?.issued_at ?? null,
     });
     const missing = REQUIRED_OFFER_VALUES.filter((k) => !String(values[k] ?? "").trim() || values[k] === "N0.00");
     if (missing.length) throw gate(`The facility record is missing data required by the offer letter: ${missing.join(", ")}.`);

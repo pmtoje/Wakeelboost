@@ -110,11 +110,11 @@ describe("template administration", () => {
     const id = await createDocxTemplateVersion(sa, { name: "Murabaha Individual Offer", applicantType: "INDIVIDUAL", filename: "x.docx", data: readFileSync("templates/offers/murabaha-individual.docx"), productionApproved: false });
     // Contractual wording is activated only after the Super Admin has approved it.
     await expect(activateTemplate(sa, id)).rejects.toThrow(/Approve this template version before activating it/);
-    const v1 = (await db.query("SELECT id FROM offer_templates WHERE applicant_type = 'INDIVIDUAL' AND version = 1")).rows[0].id;
+    const v1 = (await db.query("SELECT id FROM offer_templates WHERE doc_type = 'OFFER_LETTER' AND applicant_type = 'INDIVIDUAL' AND version = 1")).rows[0].id;
     await db.query("UPDATE offer_templates SET production_approved = false WHERE id = $1", [v1]);
     await approveTemplate(sa, id);
     await activateTemplate(sa, id);
-    const active = (await db.query("SELECT applicant_type, version FROM offer_templates WHERE status = 'ACTIVE' ORDER BY applicant_type")).rows;
+    const active = (await db.query("SELECT applicant_type, version FROM offer_templates WHERE status = 'ACTIVE' AND doc_type = 'OFFER_LETTER' ORDER BY applicant_type")).rows;
     expect(active).toEqual([{ applicant_type: "ENTERPRISE", version: 1 }, { applicant_type: "INDIVIDUAL", version: 2 }, { applicant_type: "LIMITED", version: 1 }]);
     const caseId = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000) });
     await driveToOffer(caseId);

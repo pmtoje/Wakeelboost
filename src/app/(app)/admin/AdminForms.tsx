@@ -152,6 +152,7 @@ export function UploadTemplateForm() {
           <select id="ut-doc" name="docType" defaultValue="OFFER_LETTER">
             <option value="OFFER_LETTER">Murabaha offer letter</option>
             <option value="PRE_DISBURSEMENT">Pre-disbursement agreement</option>
+            <option value="POST_DISBURSEMENT">Murabaha sale contract (post-disbursement)</option>
             <option value="GSI_FORM">GSI form</option>
             <option value="INSURANCE_SIGNED">Customer insurance (Takaful) form</option>
           </select>

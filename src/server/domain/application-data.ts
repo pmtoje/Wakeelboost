@@ -30,6 +30,7 @@ export const draftDataSchema = z.object({
   requestedAmountKobo: z.number().int().nullable().default(null),
   daoCode: text(30).default(""),
   posSerial: text(60).default(""),
+  customerAccount: text(10).default(""), // Customer's AltBank account (NUBAN): proceeds domiciliation and repayment debits
   tenorMonths: z.number().int().nullable().default(null),
   items: z.array(itemSchema).max(100).default([]),
   supplierName: text().default(""),
@@ -108,6 +109,7 @@ export function validateForSubmission(i: SubmissionCheckInput): Record<string, s
   if (d.requestedAmountKobo === null) e.requestedAmountKobo = "Requested amount is required.";
   if (!d.daoCode) e.daoCode = "DAO code is required.";
   if (!d.posSerial) e.posSerial = "POS serial number is required.";
+  if (d.customerAccount && !/^\d{10}$/.test(d.customerAccount)) e.customerAccount = "AltBank account number must be 10 digits.";
   if (!d.tenorMonths || !Number.isInteger(d.tenorMonths) || d.tenorMonths < 1 || d.tenorMonths > i.maxTenorMonths) e.tenorMonths = `Tenor must be a whole number of months from 1 to ${i.maxTenorMonths}.`;
   if (d.items.length === 0) e.items = "Add at least one item to finance.";
   else if (d.items.some((it) => !it.description || it.quantity < 1 || it.unitCostKobo < 1))
