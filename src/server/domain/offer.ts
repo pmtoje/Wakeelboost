@@ -217,6 +217,7 @@ export function offerDocxValues(o: OfferData): { values: Record<string, string>;
     tin: o.tin ?? "",
     first_director_name: first?.fullName ?? "",
     first_director_bvn: first?.bvn ?? "",
+    second_director_name: rest[0]?.fullName ?? "",
     // Corporate letter: RM + business endorser. Individual/Enterprise letters: endorser + Head, Payment & Collection.
     signatory_1_name: limited ? o.people.initiatorName : o.people.endorserName,
     signatory_1_title: limited ? o.people.initiatorTitle : o.people.endorserTitle,

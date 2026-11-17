@@ -83,6 +83,10 @@ describe("disbursement documents", () => {
     expect(text).toContain(N(asmt.markup_kobo));
     expect(text).toMatch(/OFFER LETTER dated the \d+(st|nd|rd|th) day of \w+ 20\d\d/);
     expect(text).toContain("HAMISH JIDDIYAH"); // bank wording unchanged; deposit left for completion by hand
+    // Paper copy is complete: the bank's signatories are named, as on the offer letter
+    const people = (await db.query("SELECT e.full_name AS endorser FROM applications a JOIN staff e ON e.id = a.endorser_id WHERE a.id = $1", [id])).rows[0];
+    expect(text).toContain(`Name: ${people.endorser}`);
+    expect(text).toMatch(/Title: Regional Business Executive/);
     expect(text).not.toMatch(/\{\{/);
     expect((await audits("FORM_PREFILLED")).length).toBe(1);
   });
@@ -96,6 +100,9 @@ describe("disbursement documents", () => {
     const c = (await db.query("SELECT d.id, v.data FROM documents d JOIN applications a ON a.id = d.application_id JOIN application_versions v ON v.id = a.current_version_id WHERE d.application_id = $1 AND d.category = 'PREFILLED_PRE_DISBURSEMENT'", [co])).rows[0];
     const ct = (await docText(c.id, RM)).text;
     expect(ct).toContain(`SIGNED FOR AND ON BEHALF OF ${c.data.companyName}`);
+    const dirs = (await db.query("SELECT d.full_name FROM application_directors d JOIN applications a ON a.current_version_id = d.version_id WHERE a.id = $1 ORDER BY d.position", [co])).rows;
+    expect(ct).toContain(`Name: ${dirs[0].full_name}`);
+    expect(ct).toContain("Title: Relationship Manager");
   });
 
   it("prints the customer's AltBank account when captured, a dotted line when not", async () => {
@@ -224,6 +231,27 @@ describe("disbursement documents", () => {
       { doc_type: "PRE_DISBURSEMENT", applicant_type: "INDIVIDUAL", production_approved: true, status: "ACTIVE" },
       { doc_type: "PRE_DISBURSEMENT", applicant_type: "LIMITED", production_approved: true, status: "ACTIVE" },
     ]);
+  });
+
+  it("re-seeding installs a changed agreement file as a new version and keeps the old one for documents already made", async () => {
+    const { seedAgreementTemplates } = await import("@/server/demo/seed");
+    await seedAgreementTemplates(db);
+    expect((await db.query("SELECT count(*)::int AS n FROM offer_templates WHERE doc_type <> 'OFFER_LETTER'")).rows[0].n).toBe(5);
+    await db.query("UPDATE offer_templates SET notes = 'older file' WHERE doc_type = 'PRE_DISBURSEMENT' AND applicant_type = 'INDIVIDUAL'");
+    await seedAgreementTemplates(db);
+    const rows = (await db.query("SELECT version, status FROM offer_templates WHERE doc_type = 'PRE_DISBURSEMENT' AND applicant_type = 'INDIVIDUAL' ORDER BY version")).rows;
+    expect(rows).toEqual([{ version: 1, status: "RETIRED" }, { version: 2, status: "ACTIVE" }]);
+  });
+
+  it("download, sign on paper and re-upload against the same document", async () => {
+    const id = await offerReady();
+    const ctx = await ctxFor(RM);
+    const prepared = (await db.query("SELECT id FROM documents WHERE application_id = $1 AND category IN ('PREFILLED_PRE_DISBURSEMENT','PREFILLED_PRE_DISBURSEMENT_PDF') AND superseded_at IS NULL", [id])).rows;
+    for (const d of prepared) expect((await readDocumentForActor(ctx, d.id, "download")).data.length).toBeGreaterThan(1000);
+    await signOnTablet(ctx, id, "PRE_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }]);
+    await uploadDocument(ctx, { applicationId: id, category: "PRE_DISBURSEMENT", filename: "signed-on-paper.pdf", data: makePdf("signed on paper") });
+    const v = (await db.query("SELECT filename, superseded_at FROM documents WHERE application_id = $1 AND category = 'PRE_DISBURSEMENT' ORDER BY version_no", [id])).rows;
+    expect(v.map((x) => [x.filename.startsWith("Signed-"), x.superseded_at === null])).toEqual([[true, false], [false, true]]);
   });
 });
 

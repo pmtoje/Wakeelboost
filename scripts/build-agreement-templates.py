@@ -10,8 +10,11 @@ What it does (python-docx 1.2):
   * Replaces the dotted blanks that the facility record can answer with {{placeholders}}: dates,
     the customer party, the goods, cost price, contract (sale) price, markup, instalment, tenor and
     the customer's AltBank account. Each placeholder is written into a single run.
-  * Leaves every other blank for completion by hand: the security deposit (Hamish Jiddiyah), the
-    bank's signatories, and the witness lines (the witness signs on the tablet signature page).
+  * Fills the bank's two signatories (the same officers who sign the offer letter) and, on the
+    Company agreement, the first two directors' names. The two columns are aligned with one tab
+    stop so names of any length line up.
+  * Leaves the security deposit (Hamish Jiddiyah) and the witness lines for completion by hand
+    (or on the tablet signature page).
   * Scrubs document author metadata.
 
 The bank's clauses, numbering and layout are otherwise unchanged.
@@ -74,6 +77,41 @@ def offer_dated(doc, contains="dated"):
     runs_replace(p, r"dated\s*[….]+\s*day of\s*[….]+\s*20[0-9….X]*", "dated the " + OFFER_DATE)
 
 
+def two_columns(p, left, right):
+    """Rewrite a 'Name:<tabs>Name:' line as 'left<one tab>right' with a fixed tab stop."""
+    from docx.shared import Inches
+    runs = p.runs
+    runs[0].text = left + "\t" + right
+    for r in runs[1:]:
+        r.text = ""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT  # justified text stretches tabbed columns
+    p.paragraph_format.tab_stops.clear_all()
+    p.paragraph_format.tab_stops.add_tab_stop(Inches(3.6))
+
+
+def signatories(doc, heading, names, titles=None):
+    """Fill the Name/Title lines that follow a 'SIGNED FOR AND ON BEHALF OF …' heading."""
+    paras = doc.paragraphs
+    start = next(i for i, p in enumerate(paras) if heading in p.text)
+    line = next((p for p in paras[start + 1:] if p.text.startswith("____") and "\t" in p.text), None)
+    if line is not None:
+        two_columns(line, "_" * 20, "_" * 20)
+    name = next(p for p in paras[start + 1:] if p.text.startswith("Name:") and "\t" in p.text)
+    title = next(p for p in paras[start + 1:] if p.text.startswith("Title:") and "\t" in p.text)
+    two_columns(name, f"Name: {names[0]}", f"Name: {names[1]}")
+    t = titles or ("", "")
+    two_columns(title, f"Title: {t[0]}".rstrip(), f"Title: {t[1]}".rstrip())
+
+
+BANK_NAMES = ("{{signatory_1_name}}", "{{signatory_2_name}}")
+BANK_TITLES = ("{{signatory_1_title}}", "{{signatory_2_title}}")
+
+
+def bank_signatories(doc):
+    signatories(doc, "SIGNED FOR AND ON BEHALF OF ALTERNATIVE BANK", BANK_NAMES, BANK_TITLES)
+
+
 def scrub(doc):
     cp = doc.core_properties
     cp.author = "The Alternative Bank"
@@ -99,6 +137,7 @@ def build_pre_individual(src, out):
     runs_replace(para(doc, "(the “CUSTOMER”)"), r"^[….]+of[….]+", "{{customer_name}} of {{customer_address}}")
     pre_common(doc)
     runs_replace(para(doc, "NAME OF CUSTOMER:"), r"NAME OF CUSTOMER:_+", "NAME OF CUSTOMER: {{customer_name}}")
+    bank_signatories(doc)
     scrub(doc)
     doc.save(out)
 
@@ -112,6 +151,7 @@ def build_pre_enterprise(src, out):
     runs_replace(p, r"address at [….]+", "address at {{customer_address}} ")
     pre_common(doc)
     runs_replace(para(doc, "NAME OF CUSTOMER:"), r"NAME OF CUSTOMER:\s+\(trading in the Name of _+\)", "NAME OF CUSTOMER: {{proprietor_name}} (trading in the Name of {{business_name}})")
+    bank_signatories(doc)
     scrub(doc)
     doc.save(out)
 
@@ -122,6 +162,8 @@ def build_pre_company(src, out):
     runs_replace(para(doc, "(the “CUSTOMER”)"), r"^[….]+\s*of\s+", "{{company_name}} of {{customer_address}} ")
     pre_common(doc, plural=True)
     runs_replace(para(doc, "SIGNED FOR AND ON BEHALF OF …"), r"OF [….]+ LIMITED", "OF {{company_name}}")
+    bank_signatories(doc)
+    signatories(doc, "SIGNED FOR AND ON BEHALF OF {{company_name}}", ("{{first_director_name}}", "{{second_director_name}}"))
     scrub(doc)
     doc.save(out)
 
@@ -160,6 +202,7 @@ def build_post_individual(src, out):
     post_common(doc)
     runs_replace(para(doc, "NAME OF CUSTOMER:", 0), r"NAME OF CUSTOMER:\s+_+", "NAME OF CUSTOMER: {{customer_name}}")
     runs_replace(para(doc, "NAME OF CUSTOMER:", 1), r"NAME OF CUSTOMER:\s*_+", "NAME OF CUSTOMER: {{customer_name}}")
+    bank_signatories(doc)
     scrub(doc)
     doc.save(out)
 
@@ -176,6 +219,7 @@ def build_post_enterprise(src, out):
     runs_replace(para(doc, "NAME OF CUSTOMER:", 0), r"NAME OF CUSTOMER:\s+_+\s+\(trading in the Name", "NAME OF CUSTOMER: {{proprietor_name}} (trading in the Name")
     runs_replace(para(doc, " of ____"), r"of _+\)", "of {{business_name}})")
     runs_replace(para(doc, "NAME OF CUSTOMER:", 1), r"NAME OF CUSTOMER:\s+x+\s+\(trading in the Name of _+\)", "NAME OF CUSTOMER: {{proprietor_name}} (trading in the Name of {{business_name}})")
+    bank_signatories(doc)
     scrub(doc)
     doc.save(out)
 

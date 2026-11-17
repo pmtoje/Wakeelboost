@@ -82,7 +82,10 @@ not received.
   - *Murabaha pre-disbursement agreement*: Individual, Enterprise and Company. Prepared with the offer letter and signed at offer pack preparation.
   - *Murabaha (sale) contract, post-disbursement (MetLaw edits)*: Individual and Enterprise, with Appendix A (receipt of asset). Prepared when the request reaches **vendor payment confirmation** (the bank has paid the vendor and owns the goods) and signed there by the initiator with the customer. The worker retries preparation if it fails.
   - Filled from the facility record: agreement date, offer letter date, customer party (name, trading name, address / company), goods, cost price, contract (sale) price, markup, monthly instalment, tenor, asset table (three lines; extra lines combined into the third) and the customer's AltBank account (new optional field on the application; a dotted line when not captured).
-  - Left for completion by hand: the security deposit (Hamish Jiddiyah) amount and percentage, and the bank's signatories (Name / Title). Witnesses sign on the tablet signature page.
+  - Also filled: the bank's two signatories (Name / Title, the same officers who sign the offer letter) and, on the Company agreement, the first two directors' names.
+  - Left for completion by hand: the security deposit (Hamish Jiddiyah) amount and percentage, and the witness lines (or signed on the tablet signature page).
+  - Re-running `npm run seed` after a template file changes installs it as the next version and retires the previous one; documents already produced keep their version.
+- **Two ways to sign every document, side by side.** Each document in the action panel has: *Sign on tablet*; *Preview*, *PDF* and *Word* (direct downloads of the fully prefilled copy, for printing and signing on paper); and *Upload signed copy* / *Re-upload signed copy* against that same document. The latest signed copy can be viewed or downloaded; every version is kept.
 - **Still not supplied:** a Company sale contract, the GSI form and the customer insurance (Takaful) form. Those rows show "No bank template · upload the signed form" until a template is uploaded under Offer and form templates, approved and activated.
 - One active template per document and applicant type (migration 013 updates the unique index and adds the sale-contract document type).
 

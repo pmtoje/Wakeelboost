@@ -431,3 +431,11 @@ dialog.modal::backdrop { background: rgb(0 0 0 / 60%); }
 .signature-pad { width: 100%; max-width: 640px; aspect-ratio: 3 / 1; height: auto; border: 1.5px dashed var(--line-strong); border-radius: var(--radius-sm); background: #fff; touch-action: none; cursor: crosshair; }
 .sign-preview { width: 100%; height: min(70vh, 720px); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; }
 .doc-table td, .doc-table th { vertical-align: middle; }
+.row-upload > summary { list-style: none; display: inline-flex; cursor: pointer; }
+.row-upload > summary::-webkit-details-marker { display: none; }
+.row-upload[open] { min-width: 260px; }
+.row-upload[open] > summary { margin-bottom: 6px; }
+.doc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.doc-item { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.doc-item-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.doc-actions { gap: 6px; flex-wrap: wrap; }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Circle, Download, Eye, FileText, Mail, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Download, Eye, FileText, Mail, PenLine, Upload, X } from "lucide-react";
 import { requireUser } from "../../../_lib/auth";
 import { db } from "@/server/db";
 import { DomainError } from "@/server/errors";
@@ -1019,7 +1019,7 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
           {PACK.map((p) => <Check key={p} ok={has(p)}>{CATEGORY_LABEL[p]}</Check>)}
         </ul>,
       );
-      body.push(<UploadPanel key="u" compact applicationId={app.id} title="Upload pack document" categories={[...PACK, "SUPPORTING"].map((x) => ({ code: x, label: CATEGORY_LABEL[x] }))} />);
+      body.push(<UploadPanel key="u" compact applicationId={app.id} title="Upload other pack documents (KYC, supporting)" categories={["KYC", ...PACK.filter((x) => x !== "KYC"), "SUPPORTING"].map((x) => ({ code: x, label: CATEGORY_LABEL[x] }))} />);
       if (missing.length) body.push(<Blocked key="miss">Missing before submission: {missing.map((m) => CATEGORY_LABEL[m]).join(", ")}.</Blocked>);
       body.push(<TaskButton key="s" hidden={hidden} action="SUBMIT_PACK" label="Submit pack to Credit Officer 3" disabled={missing.length > 0} doneHref={doneHref} />);
       break;
@@ -1101,6 +1101,8 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
 /** Disbursement documents: prepared (prefilled) copy, signing status, sign on the tablet, or upload a signed copy. */
 async function DisbursementDocs(p: { key: string; appId: string; applicantType: ApplicantType; docs: DocumentRow[]; forms: FormSpec[]; offer?: { pdf?: DocumentRow; word?: DocumentRow; template: boolean }; note?: string }) {
   const view = (docId: string) => `/requests/${p.appId}?tab=documents&doc=${docId}`;
+  const { session } = await requireUser({ touch: false });
+  const dl = (docId: string) => signDocumentLink(docId, session.staffId, session.sessionId, "download");
   const rows = [
     ...(p.offer ? [{ slug: "offer-letter", label: "Murabaha offer letter", pdf: p.offer.pdf, word: p.offer.word, signedCat: "SIGNED_OFFER", template: p.offer.template }] : []),
     ...(await Promise.all(
@@ -1118,35 +1120,40 @@ async function DisbursementDocs(p: { key: string; appId: string; applicantType: 
     <div key={p.key} className="summary-box small">
       <p className="eyebrow">{p.offer ? "Disbursement documents" : "Murabaha sale contract"}</p>
       {p.note && <p style={{ margin: "0 0 8px" }}>{p.note}</p>}
-      <div className="table-wrap">
-        <table className="data doc-table">
-          <thead><tr><th>Document</th><th>Prepared copy</th><th>Signed copy</th><th><span className="sr-only">Actions</span></th></tr></thead>
-          <tbody>
-            {rows.map((r) => {
-              const s = p.docs.find((d) => d.category === r.signedCat);
-              return (
-                <tr key={r.slug}>
-                  <td>{r.label}</td>
-                  <td>
-                    {r.word ? (
-                      <>
-                        {r.pdf && <Link href={view(r.pdf.id)}><Eye className="icon" aria-hidden="true" /> Preview</Link>}
-                        {r.pdf && " · "}
-                        <Link href={view(r.word.id)}><Download className="icon" aria-hidden="true" /> Word</Link>
-                      </>
-                    ) : (
-                      <span className="muted">{r.template ? "Not prepared yet" : "No bank template · upload the signed form"}</span>
-                    )}
-                  </td>
-                  <td>{s ? <><CheckCircle2 className="icon" aria-hidden="true" /> <Link href={view(s.id)}>v{s.version_no}</Link> · {formatLagos(s.uploaded_at)}</> : <span className="muted">Not signed</span>}</td>
-                  <td>{r.word && <Link className="btn btn-sm" href={`/requests/${p.appId}/sign/${r.slug}`}>{s ? "Sign again" : "Sign on tablet"}</Link>}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <p className="muted" style={{ margin: "6px 0 0" }}>Sign on the tablet, or download, sign on paper and upload the signed copy. A new upload or signing replaces the previous signed copy; every version is kept.</p>
+      <ul className="doc-list">
+        {rows.map((r) => {
+          const s = p.docs.find((d) => d.category === r.signedCat);
+          return (
+            <li key={r.slug} className="doc-item">
+              <div className="doc-item-head">
+                <strong>{r.label}</strong>
+                {s ? (
+                  <span className="badge badge-green"><CheckCircle2 className="icon" aria-hidden="true" /> Signed v{s.version_no}</span>
+                ) : (
+                  <span className="badge">{r.word ? "Prepared · not signed" : r.template ? "Not prepared yet" : "No bank template"}</span>
+                )}
+              </div>
+              {s && (
+                <p className="muted" style={{ margin: 0 }}>
+                  Signed copy filed {formatLagos(s.uploaded_at)} · <Link href={view(s.id)}>view</Link> · <a href={dl(s.id)} download>download</a>
+                </p>
+              )}
+              {!r.word && !r.template && <p className="muted" style={{ margin: 0 }}>Upload the bank&apos;s signed form.</p>}
+              <div className="row doc-actions">
+                {r.word && <Link className="btn btn-sm btn-primary" href={`/requests/${p.appId}/sign/${r.slug}`}><PenLine className="icon" aria-hidden="true" /> {s ? "Sign again" : "Sign on tablet"}</Link>}
+                {r.pdf && <Link className="btn btn-sm" href={view(r.pdf.id)}><Eye className="icon" aria-hidden="true" /> Preview</Link>}
+                {r.pdf && <a className="btn btn-sm" href={dl(r.pdf.id)} download><Download className="icon" aria-hidden="true" /> PDF</a>}
+                {r.word && <a className="btn btn-sm" href={dl(r.word.id)} download><Download className="icon" aria-hidden="true" /> Word</a>}
+              </div>
+              <details className="row-upload">
+                <summary className="btn btn-sm"><Upload className="icon" aria-hidden="true" /> {s ? "Re-upload signed copy" : "Upload signed copy"}</summary>
+                <UploadPanel compact applicationId={p.appId} title={`Upload the signed ${r.label.toLowerCase().replace("murabaha", "Murabaha")}`} categories={[{ code: r.signedCat, label: CATEGORY_LABEL[r.signedCat] }]} />
+              </details>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="muted" style={{ margin: "6px 0 0" }}>Every prepared document is filled in from the facility record. Either sign it on the tablet, or download it (PDF or Word), print, sign on paper and upload the signed copy against the same row. A new upload or signing replaces the previous signed copy; every version is kept.</p>
       {rows.some((r) => r.slug !== "offer-letter" && r.template) && <PrefillFormsButton applicationId={p.appId} />}
     </div>
   );

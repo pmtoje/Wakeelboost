@@ -4,7 +4,7 @@
 import type { Db } from "../db";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { objectStore } from "../storage";
 import { docxPlaceholders } from "../domain/offer-docx";
 import { DOCX_MIME } from "../domain/offer";
@@ -126,14 +126,18 @@ export const BANK_AGREEMENT_TEMPLATES = [
 
 export async function seedAgreementTemplates(q: Db) {
   for (const t of BANK_AGREEMENT_TEMPLATES) {
-    if ((await q.query("SELECT 1 FROM offer_templates WHERE source_filename = $1", [t.source])).rowCount) continue;
     const data = await readFile(path.resolve(process.cwd(), "templates/agreements", t.file));
+    const sha = createHash("sha256").update(data).digest("hex");
+    const prev = (await q.query("SELECT id, version, notes FROM offer_templates WHERE source_filename = $1 ORDER BY version DESC LIMIT 1", [t.source])).rows[0];
+    if (prev && String(prev.notes ?? "").includes(sha)) continue; // this exact file is already installed
     const key = `templates/offer/${randomUUID()}.docx`;
     await objectStore().put(key, data, DOCX_MIME);
+    // A changed file becomes the next version; documents already produced stay linked to the version they came from.
+    if (prev) await q.query("UPDATE offer_templates SET status = 'RETIRED' WHERE source_filename = $1 AND status = 'ACTIVE'", [t.source]);
     await q.query(
       `INSERT INTO offer_templates (name, version, format, applicant_type, storage_key, source_filename, status, production_approved, notes, activated_at, variables, validated_at, doc_type)
-       VALUES ($1, 1, 'DOCX', $2, $3, $4, 'ACTIVE', true, $5, now(), $6, now(), $7)`,
-      [t.name, t.type, key, t.source, "Bank agreement with WakeelBoost placeholders. Approved for live use on the bank's instruction (17 Nov 2026).", JSON.stringify(await docxPlaceholders(data)), t.docType],
+       VALUES ($1, $2, 'DOCX', $3, $4, $5, 'ACTIVE', true, $6, now(), $7, now(), $8)`,
+      [t.name, (prev?.version ?? 0) + 1, t.type, key, t.source, `Bank agreement with WakeelBoost placeholders. Approved for live use on the bank's instruction (17 Nov 2026). File sha256:${sha}`, JSON.stringify(await docxPlaceholders(data)), t.docType],
     );
   }
 }
