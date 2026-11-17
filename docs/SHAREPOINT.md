@@ -22,7 +22,16 @@ them at rest.
    - API permissions: Microsoft Graph, **Application** permission `Sites.Selected`. Grant admin consent.
      (Do not grant `Sites.ReadWrite.All` or `Files.ReadWrite.All`: they cover every site in the tenant.)
    - Create a client secret (or certificate). Note the tenant ID, the application (client) ID and the secret.
-4. **Give the app access to this one site** (Sites.Selected), for example with PnP PowerShell:
+4. **Give the app access to this one site** (Sites.Selected). The ready-made script
+   `scripts/grant-sharepoint-access.ps1` does this with the Microsoft Graph PowerShell module and then
+   lists the site's app permissions to confirm:
+
+   ```powershell
+   ./scripts/grant-sharepoint-access.ps1 -AppId <client-id> `
+     -Site "sterlingbankng-my.sharepoint.com:/personal/paul_toje_altbank_ng"   # trial OneDrive
+   ```
+
+   Or with PnP PowerShell:
 
    ```powershell
    Grant-PnPAzureADAppSitePermission -AppId <client-id> -DisplayName "WakeelBoost Work Desk" `
