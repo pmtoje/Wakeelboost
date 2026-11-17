@@ -68,8 +68,15 @@ describe("automatic Murabaha offer letters", () => {
     expect((await audits("OFFER_LETTER_ISSUED")).length).toBe(1);
   });
 
+  it("the bank's three Murabaha templates are approved for live use", async () => {
+    const t = (await db.query("SELECT applicant_type, production_approved FROM offer_templates WHERE status = 'ACTIVE' ORDER BY applicant_type")).rows;
+    expect(t).toEqual([{ applicant_type: "ENTERPRISE", production_approved: true }, { applicant_type: "INDIVIDUAL", production_approved: true }, { applicant_type: "LIMITED", production_approved: true }]);
+  });
+
   it("fail visibly (not issued) when the active template is not approved in production, then succeed after approval", async () => {
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000_000) });
+    // The bank's seeded templates are approved; simulate a newly activated, unapproved version.
+    await db.query("UPDATE offer_templates SET production_approved = false WHERE status = 'ACTIVE' AND applicant_type = 'INDIVIDUAL'");
     await driveToOffer(id);
     process.env.APP_ENV = "production";
     try {

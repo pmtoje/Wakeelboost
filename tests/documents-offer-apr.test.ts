@@ -162,8 +162,9 @@ describe("offer generation per entity type", () => {
     expect(text).toMatch(/2\. Director Two BVN: 22200000002/);
     expect(text).toMatch(/3\. Director Three BVN: 22200000003/);
   });
-  it("production refuses an offer template that is not bank-approved", async () => {
+  it("production refuses an offer template that is not approved", async () => {
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000) });
+    await db.query("UPDATE offer_templates SET production_approved = false WHERE status = 'ACTIVE'");
     await driveToOffer(id);
     const { generateOffer } = await import("@/server/domain/offer");
     process.env.APP_ENV = "production";
