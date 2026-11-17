@@ -140,10 +140,18 @@ export const config = {
   get seedfi() {
     const baseUrl = str("SEEDFI_BASE_URL", "").replace(/\/$/, "");
     const apiKey = str("SEEDFI_API_KEY", "");
+    // Alternative to an API key: the Altmall SeedFi account sign-in. The app obtains and renews the
+    // 30-minute access token itself (login + refresh endpoints), so no key has to be created by hand.
+    const username = str("SEEDFI_USERNAME", "");
+    const password = str("SEEDFI_PASSWORD", "");
+    const accountAuth = !!username && !!password;
     return {
       baseUrl,
       apiKey,
-      configured: !!baseUrl && !!apiKey,
+      username,
+      password,
+      authMode: (apiKey ? "API_KEY" : accountAuth ? "ACCOUNT" : "NONE") as "API_KEY" | "ACCOUNT" | "NONE",
+      configured: !!baseUrl && (!!apiKey || accountAuth),
       environment: /\/\/loanengine\.theseedfi\.com/.test(baseUrl) ? "production" : baseUrl ? "staging" : "unconfigured",
       timeoutMs: int("SEEDFI_TIMEOUT_MS", 45_000),
       // SeedFi partner organisation: WakeelBoost uses the Altmall integration (SeedFi API v2.0, April 2026).

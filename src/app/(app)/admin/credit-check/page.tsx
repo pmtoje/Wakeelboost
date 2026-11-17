@@ -1,6 +1,7 @@
 import { requireSuperAdmin } from "../guard";
 import { db } from "@/server/db";
 import { config } from "@/server/config";
+import { seedfiTokenStatus } from "@/server/integrations/seedfi";
 import { creditSettings } from "@/server/domain/credit-check";
 import { formatLagos } from "@/server/time";
 import { PageHeader } from "@/components/PageHeader";
@@ -11,6 +12,7 @@ export const metadata = { title: "Credit check (SeedFi)" };
 export default async function CreditCheckAdmin() {
   await requireSuperAdmin();
   const s = config.seedfi;
+  const token = seedfiTokenStatus();
   const rules = await creditSettings(db);
   const history = (await db.query("SELECT c.*, st.full_name FROM credit_check_settings c LEFT JOIN staff st ON st.id = c.created_by ORDER BY version DESC")).rows;
   const stats = (
@@ -32,6 +34,11 @@ export default async function CreditCheckAdmin() {
           <div className="v">{s.configured ? "Configured" : "Not configured"}</div>
           <span className={`badge ${s.configured ? "badge-green" : "badge-red"}`}>{s.configured ? `${s.environment} · ${new URL(s.baseUrl).host}` : "Credit checks report unavailable"}</span>
         </div>
+        <div className="metric">
+          <div className="k">Authentication</div>
+          <div className="v" style={{ fontSize: 16 }}>{s.authMode === "ACCOUNT" ? "Altmall account sign-in" : s.authMode === "API_KEY" ? "API key" : "Not set"}</div>
+          <span className="small muted">{s.authMode === "ACCOUNT" ? (token ? `Access token renews automatically · valid to ${formatLagos(token.expiresAt)}` : "Signs in automatically on the first enquiry") : s.authMode === "API_KEY" ? "Key held in the server secret store" : ""}</span>
+        </div>
         <div className="metric"><div className="k">Last successful response</div><div className="v" style={{ fontSize: 16 }}>{lastOk ? formatLagos(lastOk) : "None yet"}</div></div>
         <div className="metric"><div className="k">Acceptable minimum · basis</div><div className="v">{rules.minAcceptableScore}</div><span className="small muted">{rules.scoreBasis === "LOWER_OF_BOTH" ? "Lower of overall and reviewed score" : rules.scoreBasis === "OVERALL" ? "Overall score" : "Reviewed score"}</span></div>
         <div className="metric"><div className="k">Credit history required</div><div className="v">{rules.requireCreditHistory ? "Yes" : "No"}</div><span className="small muted">rules v{rules.version}</span></div>
@@ -44,7 +51,7 @@ export default async function CreditCheckAdmin() {
       {!s.configured && (
         <div className="alert alert-warn" style={{ marginBottom: 16 }}>
           <span>
-            Set <code>SEEDFI_BASE_URL</code> (staging <code>https://stg-loan-engine.theseedfi.com</code>, production <code>https://loanengine.theseedfi.com</code> after SeedFi&apos;s go-live sign-off) and <code>SEEDFI_API_KEY</code> in the server&apos;s secret store. The key is never shown here, sent to browsers or logged. Until then, new requests show “Credit check unavailable” and cannot proceed.
+            Set <code>SEEDFI_BASE_URL</code> (production <code>https://loanengine.theseedfi.com</code>) and the Altmall SeedFi account sign-in, <code>SEEDFI_USERNAME</code> and <code>SEEDFI_PASSWORD</code>, in the server&apos;s secret store. The app then signs in and renews its access automatically; no API key has to be created by hand (<code>SEEDFI_API_KEY</code> remains an alternative). Credentials are never shown here, sent to browsers or logged. Until then, new requests show “Credit check unavailable” and cannot proceed.
           </span>
         </div>
       )}

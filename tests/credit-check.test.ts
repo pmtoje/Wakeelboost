@@ -8,7 +8,8 @@ import { readDocumentForActor } from "@/server/domain/documents";
 import { canSeeCreditDetail, classify, proceedWithReason, creditSettings, latestCreditCheck, runCreditCheck, updateCreditSettings } from "@/server/domain/credit-check";
 import { act, appRow, ctxFor, makePdf, openTaskOf, sampleData } from "@/server/demo/scenario";
 import { audits, outbox, resetDb, staffId } from "./helpers";
-import { BVN_ADVERSE, BVN_BADAUTH, BVN_DOWN, BVN_FAIR, BVN_GARBAGE, calls } from "./seedfi-stub";
+import { BVN_ADVERSE, BVN_BADAUTH, BVN_DOWN, BVN_FAIR, BVN_GARBAGE, auth, calls } from "./seedfi-stub";
+import { resetSeedfiTokenForTests } from "@/server/integrations/seedfi";
 
 beforeEach(async () => {
   await resetDb();
@@ -361,4 +362,66 @@ describe("Proceed with Reason (adverse result)", () => {
     await runCreditCheck(rm, ok, ident("22233344455"), randomUUID());
     await expect(proceedWithReason(rm, ok, "No need but trying")).rejects.toThrow(/only while adverse SeedFi findings/);
   }, 20_000);
+});
+
+describe("automatic SeedFi sign-in (Altmall account)", () => {
+  async function withAccount(fn: () => Promise<void>) {
+    const key = process.env.SEEDFI_API_KEY;
+    delete process.env.SEEDFI_API_KEY;
+    process.env.SEEDFI_USERNAME = "integrations@altmall.example";
+    process.env.SEEDFI_PASSWORD = auth.password;
+    resetSeedfiTokenForTests();
+    auth.valid.clear();
+    try {
+      await fn();
+    } finally {
+      process.env.SEEDFI_API_KEY = key;
+      delete process.env.SEEDFI_USERNAME;
+      delete process.env.SEEDFI_PASSWORD;
+      resetSeedfiTokenForTests();
+    }
+  }
+
+  it("signs in once, reuses the token and sends it as a Bearer token", () =>
+    withAccount(async () => {
+      const { rm, id } = await newDraft();
+      expect((await runCreditCheck(rm, id, ident("22233344455"), randomUUID())).status).toBe("ACCEPTABLE");
+      const { id: id2 } = await newDraft();
+      await runCreditCheck(rm, id2, ident("22233344456"), randomUUID());
+      const logins = calls.filter((c) => c.url.endsWith("/auth/api/v1/login"));
+      expect(logins.length).toBe(1);
+      expect(logins[0].body).toEqual({ email: "integrations@altmall.example", password: auth.password });
+      const scoring = calls.filter((c) => c.url.endsWith("/seed-score/calculate"));
+      expect(scoring.map((c) => c.headers.Authorization)).toEqual(["Bearer tok-" + auth.issued, "Bearer tok-" + auth.issued]);
+      expect(scoring[0].headers["X-API-Key"]).toBeUndefined();
+      // Credentials never reach the audit trail
+      expect(JSON.stringify((await db.query("SELECT details, reason FROM audit_events")).rows)).not.toContain(auth.password);
+    }));
+
+  it("renews an expired token with the refresh token, and signs in again when SeedFi rejects the token", () =>
+    withAccount(async () => {
+      const { rm, id } = await newDraft();
+      auth.expiresIn = 61; // shorter than the renewal margin: the next call must renew first
+      await runCreditCheck(rm, id, ident("22233344455"), randomUUID());
+      auth.expiresIn = 1800;
+      const { id: id2 } = await newDraft();
+      await runCreditCheck(rm, id2, ident("22233344455"), randomUUID());
+      expect(calls.filter((c) => c.url.endsWith("/auth/api/v1/refresh")).length).toBe(1);
+      // SeedFi rejects the current token: the client renews it and the enquiry still succeeds.
+      auth.valid.clear();
+      const { id: id3 } = await newDraft();
+      expect((await runCreditCheck(rm, id3, ident("22233344455"), randomUUID())).status).toBe("ACCEPTABLE");
+      expect(calls.filter((c) => c.url.endsWith("/auth/api/v1/refresh")).length).toBe(2);
+      expect(calls.filter((c) => c.url.endsWith("/auth/api/v1/login")).length).toBe(1);
+    }));
+
+  it("reports wrong account credentials as unavailable, never as a credit decision", () =>
+    withAccount(async () => {
+      process.env.SEEDFI_PASSWORD = "wrong";
+      const { rm, id } = await newDraft();
+      const r = await runCreditCheck(rm, id, ident("22233344455"), randomUUID());
+      expect(r.status).toBe("UNAVAILABLE");
+      expect((await latestCreditCheck(db, id))).toMatchObject({ status: "FAILED", error_code: "AUTH", outcome: null });
+      expect(calls.some((c) => c.url.endsWith("/seed-score/calculate"))).toBe(false);
+    }));
 });

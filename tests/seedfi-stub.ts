@@ -27,10 +27,26 @@ function score(overall: number, reviewed: number, history: boolean) {
   };
 }
 
+/** Account sign-in simulation (documented login / refresh responses). */
+export const auth = { password: "correct-password", issued: 0, valid: new Set<string>(), expiresIn: 1800 };
+
 export const stubTransport: SeedfiTransport = {
   async post(url, headers, body) {
     const b = body as Record<string, unknown>;
     calls.push({ url, body: b, headers });
+    if (url.endsWith("/auth/api/v1/login")) {
+      if (b.password !== auth.password) return { status: 401, json: { detail: "Invalid credentials", status_code: 401 } };
+      const t = `tok-${++auth.issued}`;
+      auth.valid.add(t);
+      return { status: 200, json: { access_token: t, refresh_token: `ref-${auth.issued}`, token_type: "bearer", expires_in: auth.expiresIn, user: { email: b.email } } };
+    }
+    if (url.endsWith("/auth/api/v1/refresh")) {
+      const t = `tok-${++auth.issued}`;
+      auth.valid.add(t);
+      return { status: 200, json: { access_token: t, token_type: "bearer", expires_in: auth.expiresIn } };
+    }
+    const bearer = headers.Authorization?.replace(/^Bearer /, "");
+    if (!headers["X-API-Key"] && (!bearer || !auth.valid.has(bearer))) return { status: 401, json: { detail: "Token expired", status_code: 401 } };
     switch (b.bvn) {
       case BVN_ADVERSE:
         return { status: 200, json: { status: 200, data: score(544, 444, true) } };

@@ -63,16 +63,14 @@ not received.
 
 ## Before production
 
-1. **SeedFi (live)**: set `SEEDFI_BASE_URL=https://loanengine.theseedfi.com` and the live
-   `SEEDFI_API_KEY` in the secret store. Production refuses SeedFi staging (test personas only).
-   Per SeedFi's documentation (v2.0, §1.3, §2.5) the live environment needs SeedFi's go-live
-   sign-off, and an API key is created by an authenticated account through
-   `POST /auth/api/v1/keys/create` and shown **once** at creation; the document does not describe
-   keys being emailed. WakeelBoost uses the **Altmall** SeedFi integration (the document "SeedFi Loan
-   Engine API Documentation, prepared for Altmall Integration", v2.0): use the Altmall account's live
-   API key once SeedFi has given Altmall's go-live sign-off.
-   The live connection has **not** been verified in this build (no key was available); all tests
-   use a stand-in that answers in SeedFi's documented format.
+1. **SeedFi (live, automatic)**: in the secret store set `SEEDFI_BASE_URL=https://loanengine.theseedfi.com`
+   and the Altmall SeedFi account sign-in, `SEEDFI_USERNAME` and `SEEDFI_PASSWORD`. The app signs in
+   (`/auth/api/v1/login`), caches the 30-minute access token, renews it with the refresh token before it
+   expires and signs in again if SeedFi rejects it; nobody creates, copies or emails keys.
+   (`SEEDFI_API_KEY` remains a supported alternative.) Production refuses SeedFi staging. WakeelBoost uses
+   the **Altmall** integration (SeedFi API documentation v2.0, prepared for Altmall); SeedFi's go-live
+   sign-off for Altmall must be in place. The live connection has **not** been verified in this build
+   (no live credentials were available); all tests use a stand-in that answers in SeedFi's documented format.
 2. **Credit rules**: enter the bank's approved rules.
 3. **Product Manager**: grant the role (Users & roles) to the responsible staff.
 4. **Offer templates**: Super Admin → Offer templates → Preview sample → Approve each of the three
