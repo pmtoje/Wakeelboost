@@ -199,9 +199,14 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
       const task = (await tx.query("SELECT * FROM tasks WHERE application_id = $1 AND status = 'OPEN'", [app.id])).rows[0];
       let role: string | null = null;
       let allowed: string[] = [];
-      if (app.stage === "DRAFT" && app.initiator_id === actor.staffId) {
+      const { originationOpen } = await import("./credit-check");
+      if (app.initiator_id === actor.staffId && originationOpen(app)) {
+        // Facility documents: after the credit check cleared, or after "Proceed with Reason".
+        allowed = UPLOADABLE_BY_STAGE.DRAFT!;
+        role = app.initiator_role;
+      } else if (app.stage === "DRAFT" && app.initiator_id === actor.staffId) {
         // Until the credit check clears, only the customer's consent form can be attached.
-        allowed = ["NOT_REQUIRED", "ACCEPTABLE", "CLEARED"].includes(app.credit_check_status) ? UPLOADABLE_BY_STAGE.DRAFT! : ["CONSENT_FORM"];
+        allowed = ["CONSENT_FORM"];
         role = app.initiator_role;
       } else if (task && task.assignee_id === actor.staffId) {
         allowed = UPLOADABLE_BY_STAGE[task.stage as Stage] ?? [];

@@ -115,7 +115,7 @@ interface DocRow {
 
 async function facilityRecord(q: Db, app: Record<string, any>, manifest: { path: string; sha256: string; category: string; version: number; note?: string }[]): Promise<Buffer> {
   const people = new Map<string, string>(
-    (await q.query("SELECT s.id, s.full_name FROM staff s WHERE s.id IN (SELECT actor_id FROM decisions WHERE application_id = $1 UNION SELECT $2::uuid UNION SELECT recorded_by FROM disbursements WHERE application_id = $1)", [app.id, app.initiator_id])).rows.map((r) => [r.id, r.full_name]),
+    (await q.query("SELECT s.id, s.full_name FROM staff s WHERE s.id IN (SELECT actor_id FROM decisions WHERE application_id = $1 UNION SELECT $2::uuid UNION SELECT recorded_by FROM disbursements WHERE application_id = $1 UNION SELECT rm_proceeded_by FROM applications WHERE id = $1 AND rm_proceeded_by IS NOT NULL)", [app.id, app.initiator_id])).rows.map((r) => [r.id, r.full_name]),
   );
   const who = (id: string | null) => (id ? people.get(id) ?? id : "");
   const version = app.current_version_id ? (await q.query("SELECT * FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0] : null;
@@ -173,6 +173,7 @@ async function facilityRecord(q: Db, app: Record<string, any>, manifest: { path:
   const dec = (await q.query("SELECT * FROM decisions WHERE application_id = $1 ORDER BY seq", [app.id])).rows;
   const pm = wb.addWorksheet("Product Manager review");
   pm.addRow(["Time", "Stage", "Action", "By", "Role", "Reason"]).font = { bold: true };
+  if (app.rm_proceeded_at) pm.addRow([formatLagos(app.rm_proceeded_at), "Credit check", "PROCEED_WITH_REASON", who(app.rm_proceeded_by), app.initiator_role, app.rm_proceed_reason ?? ""]);
   for (const d of dec.filter((x) => x.stage === "CREDIT_REVIEW" || x.stage === "CREDIT_CLARIFICATION")) pm.addRow([formatLagos(d.created_at), STAGE_LABELS[d.stage as Stage] ?? d.stage, d.action, who(d.actor_id), ROLE_LABELS[d.actor_role as Role] ?? d.actor_role, d.reason ?? ""]);
   const ap = wb.addWorksheet("Approvals");
   ap.addRow(["Time", "Stage", "Action", "By", "Role", "Reason", "Invalidated"]).font = { bold: true };

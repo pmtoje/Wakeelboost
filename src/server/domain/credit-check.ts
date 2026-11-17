@@ -20,6 +20,8 @@ import { conflict, DomainError, forbidden, gate, invalid, notFound } from "../er
 import { last4 } from "../mask";
 import { calculateSeedScore, type SeedScoreResult } from "../integrations/seedfi";
 import { holdsRole } from "./access";
+import { enqueueEmail } from "../notify/outbox";
+import { caseLink, simpleEmail } from "../notify/templates";
 import { type AppRow, chooseAssignee, openTask } from "./assignment";
 import { storeCreditReport } from "./credit-report";
 
@@ -39,6 +41,69 @@ export const CREDIT_STATUS_LABEL: Record<CreditCheckStatus, string> = {
 
 /** Statuses that permit the initiator to complete and submit the facility application. */
 export const ORIGINATION_ALLOWED: readonly string[] = ["NOT_REQUIRED", "ACCEPTABLE", "CLEARED"];
+
+export interface OriginationState {
+  stage: string;
+  credit_check_status?: string | null;
+  rm_proceeded_at?: Date | string | null;
+  pm_hold_submitted_at?: Date | string | null;
+}
+/**
+ * May the initiator work on the facility application now? Either the credit check cleared, or the
+ * initiator chose "Proceed with Reason" after an adverse result (the Product Manager's review stays
+ * open in parallel) and has not yet submitted.
+ */
+export function originationOpen(a: OriginationState): boolean {
+  const st = a.credit_check_status ?? "NOT_REQUIRED";
+  if (a.stage === "DRAFT" && ORIGINATION_ALLOWED.includes(st)) return true;
+  return !!a.rm_proceeded_at && !a.pm_hold_submitted_at && st !== "DECLINED" && ["DRAFT", "CREDIT_REVIEW", "CREDIT_CLARIFICATION"].includes(a.stage);
+}
+
+/**
+ * Initiator: continue origination after an adverse SeedFi result, with a written reason. The
+ * Product Manager's review remains open and can still decline the request before business
+ * endorsement; a request submitted before that decision waits for it.
+ */
+export async function proceedWithReason(ctx: Ctx, appId: string, reason: string) {
+  const actor = ctx.actor;
+  if (!actor) throw forbidden();
+  const text = (reason ?? "").trim();
+  try {
+    return await withTx(async (tx) => {
+      const app = (await tx.query("SELECT * FROM applications WHERE id = $1 FOR UPDATE", [appId])).rows[0];
+      if (!app) throw notFound();
+      if (app.initiator_id !== actor.staffId || !(await holdsRole(tx, actor.staffId, app.initiator_role))) throw forbidden("Only the initiator can proceed with a reason.");
+      if (!["REVIEW_REQUIRED", "CLARIFICATION_REQUIRED"].includes(app.credit_check_status)) throw gate("Proceed with Reason is available only while adverse SeedFi findings are under Product Manager review.");
+      if (app.rm_proceeded_at) throw conflict("You have already chosen to proceed with a reason.");
+      const check = (await tx.query<CreditCheckRow>("SELECT * FROM credit_checks WHERE id = $1", [app.credit_check_id])).rows[0];
+      if (!check || check.status !== "COMPLETED" || check.outcome !== "ADVERSE") throw gate("Proceed with Reason applies to a completed SeedFi check with adverse findings.");
+      if (text.length < 10) throw invalid("Explain why the request should proceed.", { reason: "Give a reason of at least 10 characters." });
+      await tx.query("UPDATE applications SET rm_proceeded_at = $2, rm_proceeded_by = $3, rm_proceed_reason = $4, updated_at = $2, lock_version = lock_version + 1 WHERE id = $1", [appId, ctx.now, actor.staffId, text.slice(0, 2000)]);
+      await audit(tx, ctx, { action: "CREDIT_PROCEEDED_WITH_REASON", actorRole: app.initiator_role, applicationId: appId, stage: app.stage, reason: text.slice(0, 500), details: { creditCheckId: check.id, reviewedScore: Number(check.reviewed_score) } });
+      const pm = (await tx.query("SELECT s.email FROM tasks t JOIN staff s ON s.id = t.assignee_id WHERE t.application_id = $1 AND t.status = 'OPEN' AND t.stage = 'CREDIT_REVIEW'", [appId])).rows[0]?.email
+        ?? (app.product_manager_id ? (await tx.query("SELECT email FROM staff WHERE id = $1", [app.product_manager_id])).rows[0]?.email : null);
+      if (pm) {
+        await enqueueEmail(tx, ctx.now, {
+          kind: "CREDIT_PROCEEDED_WITH_REASON",
+          dedupeKey: `proceed-reason:${appId}`,
+          applicationId: appId,
+          to: [pm],
+          subject: `WakeelBoost ${app.ref}: initiator is proceeding despite adverse SeedFi findings`,
+          text: simpleEmail([
+            `The initiator of ${app.ref} (${app.customer_name}) chose to proceed with the facility application while your credit review is open.`,
+            `Reason given: ${text}`,
+            "Your review still applies: decline before business endorsement if the request should not go ahead. A request submitted before your decision waits for it.",
+            `Open the request: ${caseLink(appId)}`,
+          ]),
+        });
+      }
+      return { message: "You can now complete the facility application. The Product Manager has been told, and can still decline the request before business endorsement." };
+    });
+  } catch (e) {
+    if (e instanceof DomainError && e.code === "FORBIDDEN") await auditOutsideTx(ctx, { action: "CREDIT_PROCEEDED_WITH_REASON", outcome: "DENIED", applicationId: appId, reason: e.message });
+    throw e;
+  }
+}
 
 export interface CreditSettings {
   id: string;
@@ -325,9 +390,9 @@ export async function updateCreditSettings(ctx: Ctx, p: { minAcceptableScore: nu
 }
 
 /** The submitted application must describe the customer whose credit was checked. */
-export async function assertCheckedIdentity(tx: Tx, app: { id: string; applicant_type: string; credit_check_status: string; credit_check_id: string | null }, version: { id: string; bvn_enc: string | null }) {
+export async function assertCheckedIdentity(tx: Tx, app: { id: string; applicant_type: string; credit_check_status: string; credit_check_id: string | null; rm_proceeded_at?: Date | string | null }, version: { id: string; bvn_enc: string | null }) {
   if (app.credit_check_status === "NOT_REQUIRED") return;
-  if (!ORIGINATION_ALLOWED.includes(app.credit_check_status)) throw gate("Complete the SeedFi credit check before submitting the facility application.");
+  if (!ORIGINATION_ALLOWED.includes(app.credit_check_status) && !app.rm_proceeded_at) throw gate("Complete the SeedFi credit check before submitting the facility application.");
   const check = (await tx.query<CreditCheckRow>("SELECT * FROM credit_checks WHERE id = $1", [app.credit_check_id])).rows[0];
   if (!check) throw gate("No credit check is recorded for this request.");
   const checked = decryptField(check.bvn_enc);

@@ -10,7 +10,7 @@ import { koboToNairaString } from "@/server/money";
 import { formatLagos } from "@/server/time";
 import { PageHeader } from "@/components/PageHeader";
 import { DraftForm } from "./DraftForm";
-import { ORIGINATION_ALLOWED } from "@/server/domain/credit-check";
+import { originationOpen } from "@/server/domain/credit-check";
 
 export const metadata = { title: "Edit request" };
 
@@ -26,9 +26,9 @@ export default async function EditRequest({ params }: { params: Promise<{ id: st
   }
   const app = c.app;
   const myTask = c.openTask && c.openTask.assignee_id === session.staffId && c.openTask.stage === "INITIATOR_CORRECTION" ? c.openTask : null;
-  if (app.initiator_id !== session.staffId || !(app.stage === "DRAFT" || myTask)) redirect(`/requests/${id}`);
-  // The facility application opens only after the credit check clears.
-  if (app.stage === "DRAFT" && !ORIGINATION_ALLOWED.includes(app.credit_check_status)) redirect(`/requests/${id}/credit-check`);
+  if (app.initiator_id !== session.staffId || !(app.stage === "DRAFT" || myTask || originationOpen(app))) redirect(`/requests/${id}`);
+  // The facility application opens only after the credit check clears (or after Proceed with Reason).
+  if (!myTask && !originationOpen(app)) redirect(`/requests/${id}/credit-check`);
   const source = c.working ?? (c.version ? { ...c.version, directors: c.directors } : null);
   const data = draftDataSchema.parse(source?.data ?? {});
   const rbes =

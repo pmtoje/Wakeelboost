@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { creditCheckAction } from "../../actions";
+import { creditCheckAction, proceedWithReasonAction } from "../../actions";
 
 /** Customer identification and consent, then the SeedFi enquiry (server-side). */
 export function CreditCheckForm({ applicationId, prefill, applicantType }: { applicationId: string; prefill: { firstName: string; lastName: string; dateOfBirth: string; gender: string; phone: string }; applicantType: string }) {
@@ -68,5 +68,27 @@ function Field({ id, label, hint, err, children }: { id: string; label: string; 
       {hint && !err && <span className="hint">{hint}</span>}
       {err && <span className="err">{err}</span>}
     </div>
+  );
+}
+
+/** After an adverse result: continue origination with a written reason (Product Manager review stays open). */
+export function ProceedWithReasonForm({ applicationId }: { applicationId: string }) {
+  return (
+    <ActionForm action={proceedWithReasonAction}>
+      {(state) => (
+        <>
+          <input type="hidden" name="applicationId" value={applicationId} />
+          <div className="field">
+            <label htmlFor="pwr-reason">Reason for proceeding</label>
+            <textarea id="pwr-reason" name="reason" rows={3} minLength={10} required placeholder="e.g. The reported default was settled in March 2025; statements show steady inflows of ₦6m a month." />
+            {state.fields?.reason && <span className="err">{state.fields.reason}</span>}
+            <span className="hint">The Product Manager is told and keeps reviewing. They can still decline the request before business endorsement.</span>
+          </div>
+          <div>
+            <SubmitButton>Proceed with Reason</SubmitButton>
+          </div>
+        </>
+      )}
+    </ActionForm>
   );
 }

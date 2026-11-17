@@ -22,6 +22,7 @@ import { liveOfferLetter } from "@/server/domain/offer-letters";
 import { archiveFilename } from "@/server/domain/archive";
 import { PricingAssessment, ThresholdChip, pricingOf } from "@/components/PricingAssessment";
 import { CreditCheckResult, CreditStatusChip } from "@/components/CreditCheck";
+import { originationOpen } from "@/server/domain/credit-check";
 import { bandLabels, e4ToPercent, pricingSettingsAt } from "@/server/domain/pricing";
 
 /** The booked schedule uses a different frequency from the monthly assessment → label as monthly equivalent. */
@@ -179,9 +180,9 @@ export default async function CasePage({ params, searchParams }: { params: Promi
         </div>
         <div className="row">
           {isInitiator && c.openTask?.assignee_id && c.openTask.assignee_id !== session.staffId && waited > REMINDER_MIN_AGE_MS && <ReminderButton applicationId={app.id} />}
-          {isInitiator && (app.stage === "DRAFT" || (myTask && myTask.stage === "INITIATOR_CORRECTION")) && (
-            <Link className="btn btn-primary" href={app.stage === "DRAFT" && !["NOT_REQUIRED", "ACCEPTABLE", "CLEARED"].includes(app.credit_check_status) ? `/requests/${app.id}/credit-check` : `/requests/${app.id}/edit`}>
-              {app.stage === "DRAFT" ? (["NOT_REQUIRED", "ACCEPTABLE", "CLEARED"].includes(app.credit_check_status) ? "Continue draft" : "Continue: credit check") : "Edit and resubmit"}
+          {isInitiator && (app.stage === "DRAFT" || originationOpen(app) || (myTask && myTask.stage === "INITIATOR_CORRECTION")) && (
+            <Link className="btn btn-primary" href={myTask?.stage === "INITIATOR_CORRECTION" || originationOpen(app) ? `/requests/${app.id}/edit` : `/requests/${app.id}/credit-check`}>
+              {myTask?.stage === "INITIATOR_CORRECTION" ? "Edit and resubmit" : originationOpen(app) ? "Continue facility application" : "Continue: credit check"}
             </Link>
           )}
         </div>
@@ -284,6 +285,14 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
             <CreditStatusChip status={app.credit_check_status} />
           </div>
           {app.product_manager_id && <p className="small muted" style={{ margin: "6px 0 0" }}>Product Manager: {name(app.product_manager_id)}</p>}
+          {app.rm_proceeded_at && (
+            <div className="alert alert-info" style={{ marginTop: 10 }}>
+              <span>
+                <strong>Initiator proceeded with reason</strong> ({formatLagos(app.rm_proceeded_at)}): {app.rm_proceed_reason}
+                {app.pm_hold_submitted_at && <> · <strong>submitted {formatLagos(app.pm_hold_submitted_at)}, waiting for the Product Manager</strong></>}
+              </span>
+            </div>
+          )}
           {c.credit ? <div style={{ marginTop: 12 }}><CreditCheckResult check={c.credit.check} detail={c.credit.detail} narration={c.credit.narration} /></div> : <p className="small muted">No enquiry has been made yet.</p>}
           {(() => {
             const rep = c.documents.find((d) => d.category === "SEEDFI_CREDIT_REPORT" && !d.superseded_at);
@@ -816,6 +825,16 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
         </p>,
       );
       if (c.credit) body.push(<div key="s" className="summary-box small">Reviewed Seed Score <strong>{Number(c.credit.check.reviewed_score)}</strong> · overall {Number(c.credit.check.overall_score)} · {c.credit.check.has_credit_history ? "has credit history" : "no credit history"}<div className="muted">{(c.credit.check.outcome_reasons ?? []).join("; ")}</div></div>);
+      if (app.rm_proceeded_at)
+        body.push(
+          <div key="pwr" className="alert alert-warn">
+            <AlertTriangle className="icon" aria-hidden="true" />
+            <span>
+              <strong>The initiator proceeded with a reason</strong>: {app.rm_proceed_reason}{" "}
+              {app.pm_hold_submitted_at ? "The request has been submitted and goes to business endorsement when you clear it; decline it to stop it." : "They are completing the application now; decline to stop the request before business endorsement."}
+            </span>
+          </div>,
+        );
       for (const r of replies) body.push(<div key={r.id} className="alert alert-info"><span><strong>Clarification from {c.people[r.actor_id] ?? "the initiator"}</strong> ({formatLagos(r.created_at)}): {r.reason}</span></div>);
       body.push(<UploadPanel key="u" compact applicationId={app.id} title="Attach supporting evidence" categories={[{ code: "SUPPORTING", label: CATEGORY_LABEL.SUPPORTING }]} />);
       break;

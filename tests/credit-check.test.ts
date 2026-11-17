@@ -5,7 +5,7 @@ import { NAIRA } from "@/server/money";
 import { createDraft, saveDraft, submitApplication } from "@/server/domain/workflow";
 import { uploadDocument } from "@/server/domain/documents";
 import { readDocumentForActor } from "@/server/domain/documents";
-import { canSeeCreditDetail, classify, creditSettings, latestCreditCheck, runCreditCheck, updateCreditSettings } from "@/server/domain/credit-check";
+import { canSeeCreditDetail, classify, proceedWithReason, creditSettings, latestCreditCheck, runCreditCheck, updateCreditSettings } from "@/server/domain/credit-check";
 import { act, appRow, ctxFor, makePdf, openTaskOf, sampleData } from "@/server/demo/scenario";
 import { audits, outbox, resetDb, staffId } from "./helpers";
 import { BVN_ADVERSE, BVN_BADAUTH, BVN_DOWN, BVN_FAIR, BVN_GARBAGE, calls } from "./seedfi-stub";
@@ -295,4 +295,70 @@ describe("automatic SeedFi credit report", () => {
     await expect(readDocumentForActor(await ctxFor("rbe.lagos@altbank.ng"), doc.id, "view")).rejects.toThrow(/credit information you are not authorised/);
     await expect(uploadDocument(rm, { applicationId: id, category: "SEEDFI_CREDIT_REPORT", filename: "x.pdf", data: makePdf("x") })).rejects.toThrow(/produced by the system/);
   });
+});
+
+describe("Proceed with Reason (adverse result)", () => {
+  async function adverse() {
+    const { rm, id } = await newDraft();
+    await runCreditCheck(rm, id, ident(BVN_ADVERSE), randomUUID());
+    return { rm, id };
+  }
+
+  it("needs a reason, then opens the facility application while the Product Manager review stays open", async () => {
+    const { rm, id } = await adverse();
+    await expect(proceedWithReason(rm, id, "ok")).rejects.toMatchObject({ fields: { reason: expect.any(String) } });
+    await expect(proceedWithReason(await ctxFor("co1@altbank.ng"), id, "Customer has strong turnover")).rejects.toThrow(/Only the initiator/);
+    await proceedWithReason(rm, id, "Reported default was settled in March 2025; statements show steady monthly inflows.");
+    const app = await appRow(id);
+    expect(app).toMatchObject({ stage: "CREDIT_REVIEW", credit_check_status: "REVIEW_REQUIRED" });
+    expect(app.rm_proceed_reason).toMatch(/settled in March 2025/);
+    expect((await openTaskOf(id))).toMatchObject({ stage: "CREDIT_REVIEW", email: "pm@altbank.ng" });
+    const pa = await audits("CREDIT_PROCEEDED_WITH_REASON");
+    expect(pa.map((a) => a.outcome)).toEqual(["DENIED", "SUCCESS"]);
+    expect(pa[1].reason).toMatch(/settled/);
+    expect((await outbox("CREDIT_PROCEEDED_WITH_REASON"))[0].to_addresses).toEqual(["pm@altbank.ng"]);
+    await saveDraft(rm, id, { data: { requestedAmountKobo: NAIRA(3_000_000) } });
+    await expect(proceedWithReason(rm, id, "Again with another reason")).rejects.toThrow(/already chosen/);
+  });
+
+  it("a submission waits for the Product Manager and goes to endorsement when cleared", async () => {
+    const { rm, id } = await adverse();
+    await proceedWithReason(rm, id, "Default settled; strong statement inflows.");
+    const r = await completeAndSubmit(rm, id);
+    expect(r.message).toMatch(/as soon as the Product Manager clears/);
+    expect(await appRow(id)).toMatchObject({ stage: "CREDIT_REVIEW" });
+    expect((await appRow(id)).pm_hold_submitted_at).not.toBeNull();
+    await expect(saveDraft(rm, id, { data: {} })).rejects.toThrow(/waiting for the Product Manager/);
+    await expect(submitApplication(rm, id, randomUUID())).rejects.toThrow(/waiting for the Product Manager/);
+    await act(id, "CLEAR_TO_PROCEED", { reason: "Agree with the initiator's assessment." });
+    expect(await openTaskOf(id)).toMatchObject({ stage: "BUSINESS_ENDORSEMENT", email: "rbe.lagos@altbank.ng" });
+    expect(await appRow(id)).toMatchObject({ credit_check_status: "CLEARED", status: "IN_PROGRESS", pm_hold_submitted_at: null });
+  });
+
+  it("the Product Manager can still stop the request before business endorsement", async () => {
+    const { rm, id } = await adverse();
+    await proceedWithReason(rm, id, "Default settled; strong statement inflows.");
+    await completeAndSubmit(rm, id);
+    await act(id, "DECLINE", { reason: "Repeated delinquencies; exposure too high." });
+    expect(await appRow(id)).toMatchObject({ stage: "REJECTED", status: "REJECTED", credit_check_status: "DECLINED" });
+    expect((await db.query("SELECT count(*)::int n FROM tasks WHERE application_id = $1 AND stage = 'BUSINESS_ENDORSEMENT'", [id])).rows[0].n).toBe(0);
+  });
+
+  it("clearance before submission returns the request to the initiator's draft as usual", async () => {
+    const { rm, id } = await adverse();
+    await proceedWithReason(rm, id, "Default settled; strong statement inflows.");
+    await act(id, "CLEAR_TO_PROCEED", { reason: "Satisfied." });
+    expect(await appRow(id)).toMatchObject({ stage: "DRAFT", credit_check_status: "CLEARED" });
+    await completeAndSubmit(rm, id);
+    expect((await openTaskOf(id)).stage).toBe("BUSINESS_ENDORSEMENT");
+  });
+
+  it("is not available after a technical failure or an acceptable result", async () => {
+    const { rm, id } = await newDraft();
+    await runCreditCheck(rm, id, ident(BVN_DOWN), randomUUID());
+    await expect(proceedWithReason(rm, id, "Seedfi is down, proceed anyway")).rejects.toThrow(/only while adverse SeedFi findings/);
+    const { id: ok } = await newDraft();
+    await runCreditCheck(rm, ok, ident("22233344455"), randomUUID());
+    await expect(proceedWithReason(rm, ok, "No need but trying")).rejects.toThrow(/only while adverse SeedFi findings/);
+  }, 20_000);
 });

@@ -22,7 +22,7 @@ import { formatKobo } from "../money";
 import { addDaysToDateString, isValidDateString, lagosDate, formatLagos } from "../time";
 import { enqueueEmail } from "../notify/outbox";
 import { kickOfferLetter, liveOfferLetter, requestOfferLetter } from "./offer-letters";
-import { ORIGINATION_ALLOWED, assertCheckedIdentity } from "./credit-check";
+import { assertCheckedIdentity, originationOpen } from "./credit-check";
 import { kickArchive, openRepository, queueArchive } from "./archive";
 import { simpleEmail, caseLink } from "../notify/templates";
 import {
@@ -250,9 +250,11 @@ async function assertCanEdit(tx: Tx, ctx: Ctx, app: AppRow) {
   const actor = ctx.actor!;
   if (app.initiator_id !== actor.staffId) throw forbidden("Only the initiator can edit this request.");
   if (!(await holdsRole(tx, actor.staffId, app.initiator_role))) throw forbidden("Your initiator role is no longer active.");
-  if (app.stage === "DRAFT") {
-    if (!ORIGINATION_ALLOWED.includes(app.credit_check_status ?? "NOT_REQUIRED")) throw gate("Complete the SeedFi credit check before entering the facility details.");
-    return;
+  if (app.stage === "DRAFT" || app.stage === "CREDIT_REVIEW" || app.stage === "CREDIT_CLARIFICATION") {
+    if (originationOpen(app)) return;
+    if (app.pm_hold_submitted_at) throw forbidden("This request was submitted and is waiting for the Product Manager's decision.");
+    if (app.stage === "DRAFT") throw gate("Complete the SeedFi credit check before entering the facility details.");
+    throw forbidden("This request cannot be edited at its current stage.");
   }
   if (app.stage === "INITIATOR_CORRECTION") {
     const t = (await tx.query("SELECT * FROM tasks WHERE application_id = $1 AND status = 'OPEN'", [app.id])).rows[0];
@@ -384,7 +386,7 @@ async function finaliseVersionForSubmission(tx: Tx, ctx: Ctx, app: AppRow): Prom
     if (!(await holdsRole(tx, version.data.rbeId, "RBE")) || version.data.rbeId === app.initiator_id) errors.rbeId = "Select an active Regional Business Executive.";
   }
   if (Object.keys(errors).length) throw invalid("The request is incomplete. Fix the highlighted items and submit again.", errors);
-  await assertCheckedIdentity(tx, { id: app.id, applicant_type: app.applicant_type, credit_check_status: app.credit_check_status ?? "NOT_REQUIRED", credit_check_id: app.credit_check_id ?? null }, version);
+  await assertCheckedIdentity(tx, { id: app.id, applicant_type: app.applicant_type, credit_check_status: app.credit_check_status ?? "NOT_REQUIRED", credit_check_id: app.credit_check_id ?? null, rm_proceeded_at: app.rm_proceeded_at ?? null }, version);
 
   const digest = materialDigest({
     type: app.applicant_type,
@@ -424,6 +426,15 @@ async function finaliseVersionForSubmission(tx: Tx, ctx: Ctx, app: AppRow): Prom
 }
 
 /** Initiator submits a draft for business endorsement. */
+/** Send a submitted request to its business endorser. */
+async function routeToEndorsement(tx: Tx, ctx: Ctx, app: AppRow) {
+  const chosen = await chooseAssignee(tx, app, "BUSINESS_ENDORSEMENT", {
+    preferred: app.initiator_role === "RM" ? app.selected_rbe_id : null,
+    requirePreferred: app.initiator_role === "RM",
+  });
+  await moveTo(tx, ctx, app, "BUSINESS_ENDORSEMENT", chosen);
+}
+
 export async function submitApplication(ctx: Ctx, appId: string, idempotencyKey: string): Promise<ActionResult> {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
@@ -431,17 +442,34 @@ export async function submitApplication(ctx: Ctx, appId: string, idempotencyKey:
     idempotent(tx, ctx, idempotencyKey, "SUBMIT", appId, async () => {
       const app = await lockApp(tx, appId);
       if (app.initiator_id !== actor.staffId) throw forbidden("Only the initiator can submit this request.");
-      if (app.stage !== "DRAFT") throw conflict("This request has already been submitted.");
       if (!(await holdsRole(tx, actor.staffId, app.initiator_role))) throw forbidden("Your initiator role is no longer active.");
+      const parallel = (app.stage === "CREDIT_REVIEW" || app.stage === "CREDIT_CLARIFICATION") && originationOpen(app);
+      if (app.stage !== "DRAFT" && !parallel) throw conflict(app.pm_hold_submitted_at ? "This request is already submitted and waiting for the Product Manager's decision." : "This request has already been submitted.");
       await finaliseVersionForSubmission(tx, ctx, app);
       (app as { submitted_at: Date | null }).submitted_at = ctx.now;
       await tx.query("UPDATE applications SET submitted_at = $2 WHERE id = $1", [app.id, ctx.now]);
+      if (parallel) {
+        // Proceed with Reason: the Product Manager's review is still open. The submission waits and
+        // goes to business endorsement automatically when the Product Manager clears it.
+        await tx.query("UPDATE applications SET pm_hold_submitted_at = $2 WHERE id = $1", [app.id, ctx.now]);
+        app.pm_hold_submitted_at = ctx.now;
+        await audit(tx, ctx, { action: "REQUEST_SUBMITTED_PENDING_PM", actorRole: app.initiator_role, applicationId: app.id, customerId: app.customer_id, stage: app.stage, details: { versionId: app.current_version_id } });
+        const pm = (await tx.query("SELECT s.email FROM tasks t JOIN staff s ON s.id = t.assignee_id WHERE t.application_id = $1 AND t.status = 'OPEN' AND t.stage = 'CREDIT_REVIEW'", [app.id])).rows[0]?.email;
+        if (pm) {
+          await enqueueEmail(tx, ctx.now, {
+            kind: "SUBMITTED_PENDING_PM",
+            dedupeKey: `pending-pm:${app.id}`,
+            applicationId: app.id,
+            to: [pm],
+            subject: `WakeelBoost ${app.ref}: submitted, waiting for your credit review decision`,
+            text: simpleEmail([`${app.ref} (${app.customer_name}) has been submitted and goes to business endorsement as soon as you clear it. Decline it if it should not proceed.`, `Open the request: ${caseLink(app.id)}`]),
+          });
+        }
+        await persistApp(tx, app, ctx.now);
+        return { applicationId: app.id, stage: app.stage, message: "Submitted. It goes to business endorsement as soon as the Product Manager clears the credit review." };
+      }
       await audit(tx, ctx, { action: "REQUEST_SUBMITTED", actorRole: app.initiator_role, applicationId: app.id, customerId: app.customer_id, stage: "DRAFT", details: { versionId: app.current_version_id } });
-      const chosen = await chooseAssignee(tx, app, "BUSINESS_ENDORSEMENT", {
-        preferred: app.initiator_role === "RM" ? app.selected_rbe_id : null,
-        requirePreferred: app.initiator_role === "RM",
-      });
-      await moveTo(tx, ctx, app, "BUSINESS_ENDORSEMENT", chosen);
+      await routeToEndorsement(tx, ctx, app);
       await persistApp(tx, app, ctx.now);
       return { applicationId: app.id, stage: app.stage, message: "Request submitted for business endorsement." };
     }),
@@ -551,6 +579,14 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
       }
       await tx.query("UPDATE applications SET credit_check_status = 'CLEARED', product_manager_id = $2 WHERE id = $1", [app.id, ctx.actor!.staffId]);
       await audit(tx, ctx, { action: "CREDIT_REVIEW_CLEARED", actorRole: task.assignee_role, applicationId: app.id, stage: task.stage, reason });
+      if (app.pm_hold_submitted_at) {
+        // The initiator proceeded with a reason and already submitted: release it to endorsement.
+        await tx.query("UPDATE applications SET pm_hold_submitted_at = NULL WHERE id = $1", [app.id]);
+        app.pm_hold_submitted_at = null;
+        await audit(tx, ctx, { action: "REQUEST_SUBMITTED", actorRole: task.assignee_role, applicationId: app.id, customerId: app.customer_id, stage: task.stage, details: { versionId: app.current_version_id, releasedByProductManager: true } });
+        await routeToEndorsement(tx, ctx, app);
+        return "Cleared. The submitted request has gone to business endorsement.";
+      }
       await moveTo(tx, ctx, app, "DRAFT", null);
       const email = await staffEmail(tx, app.initiator_id);
       if (email) {

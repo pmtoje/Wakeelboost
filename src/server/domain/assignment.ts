@@ -74,6 +74,8 @@ export interface AppRow {
   credit_check_status?: string;
   credit_check_id?: string | null;
   product_manager_id?: string | null;
+  rm_proceeded_at?: Date | null;
+  pm_hold_submitted_at?: Date | null;
   lock_version: number;
   created_at: Date;
   submitted_at: Date | null;

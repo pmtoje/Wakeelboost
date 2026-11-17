@@ -26,9 +26,16 @@ report is produced for a failed enquiry.
 New request → customer identification and consent → SeedFi Seed Score → eligibility:
 
 - **Acceptable** (score at or above the minimum): the facility application opens.
-- **Adverse**: the request goes to the Product Manager's Credit Review Queue. The Product Manager
-  clears it, requests clarification from the initiator, or declines it, always with a reason.
-  Clearance permits origination only; the facility still passes every credit approval.
+- **Adverse** (e.g. a poor Seed Score): the request goes to the Product Manager's Credit Review
+  Queue. The Product Manager clears it, requests clarification from the initiator, or declines it,
+  always with a reason. Clearance permits origination only; the facility still passes every credit
+  approval.
+- **Proceed with Reason**: after an adverse result the initiator may continue the facility
+  application immediately by recording a reason (at least 10 characters). The Product Manager is
+  notified and the review stays open: the Product Manager can still decline before business
+  endorsement. If the initiator submits first, the request waits and goes to business endorsement
+  automatically when the Product Manager clears it. The reason is shown on the facility record, in
+  God's Eye and in the archive.
 - **Technical failure** (timeout, outage, credentials, unexpected response): "Credit check
   unavailable". No credit decision is recorded and the initiator can retry.
 

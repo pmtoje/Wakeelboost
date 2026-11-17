@@ -72,7 +72,13 @@ export async function facilityLifecycle(ctx: Ctx, appId: string) {
   });
   const pmDec = decisions.filter((d: { stage: string }) => d.stage === "CREDIT_REVIEW").at(-1);
   if (credit?.outcome === "ADVERSE" || pmDec)
-    steps.push({ key: "pm", label: "Product Manager review", state: pmDec ? (pmDec.action === "DECLINE" ? "failed" : pmDec.action === "CLEAR_TO_PROCEED" ? "done" : "current") : "current", at: pmDec?.created_at ?? null, detail: pmDec ? `${pmDec.action.replace(/_/g, " ").toLowerCase()} by ${pmDec.full_name}: ${pmDec.reason}` : "Awaiting decision" });
+    steps.push({
+      key: "pm",
+      label: "Product Manager review",
+      state: pmDec ? (pmDec.action === "DECLINE" ? "failed" : pmDec.action === "CLEAR_TO_PROCEED" ? "done" : "current") : "current",
+      at: pmDec?.created_at ?? null,
+      detail: [pmDec ? `${pmDec.action.replace(/_/g, " ").toLowerCase()} by ${pmDec.full_name}: ${pmDec.reason}` : "Awaiting decision", app.rm_proceeded_at ? `Initiator proceeded with reason: ${app.rm_proceed_reason}` : null].filter(Boolean).join(" · "),
+    });
   steps.push({ key: "assessment", label: "Assessment", state: assessment ? "done" : openStage === "FIRST_CREDIT_REVIEW" ? "current" : "pending", at: assessment?.created_at ?? null, detail: assessment ? `DSR ${Number(assessment.dsr_percent)}% · APR ${Number(assessment.apr_percent).toFixed(2)}%` : null });
   const finalApproval = last("DIVISIONAL_HEAD_REVIEW", ["APPROVE"]);
   const approvalOpen = openStage && ["BUSINESS_ENDORSEMENT", "FIRST_CREDIT_REVIEW", "SECOND_CREDIT_REVIEW", "UNIT_HEAD_REVIEW", "DIVISIONAL_HEAD_REVIEW", "CREDIT_CORRECTION", "INITIATOR_CORRECTION"].includes(openStage);

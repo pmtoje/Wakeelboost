@@ -7,7 +7,7 @@ import { uploadDocument } from "@/server/domain/documents";
 import { parseCalculatorForm, recordAssessment } from "@/server/domain/assessment";
 import { generateOffer } from "@/server/domain/offer";
 import { revealIdentifiers } from "@/server/domain/views";
-import { runCreditCheck } from "@/server/domain/credit-check";
+import { proceedWithReason, runCreditCheck } from "@/server/domain/credit-check";
 import { retryArchive } from "@/server/domain/archive";
 import { invalid } from "@/server/errors";
 import { parseNairaToKobo } from "@/server/money";
@@ -207,6 +207,17 @@ export async function archiveAction(_p: ActionState, fd: FormData): Promise<Acti
   try {
     await retryArchive(ctx, str(fd, "applicationId"));
     return { ok: true, message: "Facility archive generated.", nonce: Date.now() };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function proceedWithReasonAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx } = await requireUser();
+  const appId = str(fd, "applicationId");
+  try {
+    const r = await proceedWithReason(ctx, appId, str(fd, "reason"));
+    return { ok: true, message: r.message, nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
   }

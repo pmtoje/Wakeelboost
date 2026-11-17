@@ -4,13 +4,14 @@ import { ArrowRight } from "lucide-react";
 import { requireUser } from "../../../../_lib/auth";
 import { db } from "@/server/db";
 import { config } from "@/server/config";
+import { formatLagos } from "@/server/time";
 import { DomainError } from "@/server/errors";
 import { getCase } from "@/server/domain/views";
 import { APPLICANT_TYPE_LABELS } from "@/server/domain/application-data";
-import { canSeeCreditDetail, creditCheckHistory, creditResponseDetail, ORIGINATION_ALLOWED, type CreditCheckStatus } from "@/server/domain/credit-check";
+import { canSeeCreditDetail, creditCheckHistory, creditResponseDetail, originationOpen, type CreditCheckStatus } from "@/server/domain/credit-check";
 import { PageHeader } from "@/components/PageHeader";
 import { CreditCheckResult, CreditJourney, CreditStatusChip } from "@/components/CreditCheck";
-import { CreditCheckForm } from "./CreditCheckForm";
+import { CreditCheckForm, ProceedWithReasonForm } from "./CreditCheckForm";
 
 export const metadata = { title: "Credit check" };
 
@@ -48,7 +49,7 @@ export default async function CreditCheckPage({ params }: { params: Promise<{ id
             <p className="eyebrow" style={{ margin: 0 }}>Status</p>
             <CreditStatusChip status={status} />
           </div>
-          {ORIGINATION_ALLOWED.includes(status) && app.stage === "DRAFT" && (
+          {originationOpen(app) && (
             <Link className="btn btn-primary" href={`/requests/${id}/edit`}>
               Continue to facility application <ArrowRight className="icon" aria-hidden="true" />
             </Link>
@@ -64,11 +65,25 @@ export default async function CreditCheckPage({ params }: { params: Promise<{ id
           {status === "UNAVAILABLE" && "The last enquiry did not return a result. No credit decision was made. Check the details and try again; if it keeps failing, contact the administrator."}
           {status === "ACCEPTABLE" && "Next: complete the stock-financing and supplier details and upload the documents."}
           {status === "CLEARED" && "The Product Manager cleared the request to proceed. Next: complete the facility application. This is not credit approval."}
-          {status === "REVIEW_REQUIRED" && "SeedFi returned adverse findings. The Product Manager is reviewing them; you will be notified of the decision."}
+          {status === "REVIEW_REQUIRED" && !app.rm_proceeded_at && "SeedFi returned adverse findings. The Product Manager is reviewing them. You can wait for the decision, or proceed with a reason below."}
+          {app.rm_proceeded_at && !app.pm_hold_submitted_at && ["REVIEW_REQUIRED", "CLARIFICATION_REQUIRED"].includes(status) && "You chose to proceed with a reason. Complete the facility application; the Product Manager's review continues and can still decline the request before business endorsement."}
+          {app.pm_hold_submitted_at && "Submitted. The request goes to business endorsement as soon as the Product Manager clears the credit review."}
           {status === "CLARIFICATION_REQUIRED" && "The Product Manager asked for clarification. Respond from the request page."}
           {status === "DECLINED" && "The Product Manager declined the request. It is closed."}
         </p>
       </div>
+      {app.rm_proceeded_at && (
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
+          <span><strong>Proceeded with reason</strong> ({formatLagos(app.rm_proceeded_at)}): {app.rm_proceed_reason}</span>
+        </div>
+      )}
+      {!app.rm_proceeded_at && ["REVIEW_REQUIRED", "CLARIFICATION_REQUIRED"].includes(status) && latest?.outcome === "ADVERSE" && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2>Proceed with Reason</h2>
+          <p className="small muted" style={{ marginTop: 0 }}>The SeedFi result is poor. You can still continue the facility application if you record why.</p>
+          <ProceedWithReasonForm applicationId={id} />
+        </div>
+      )}
       {canRun && (
         <div className="card" style={{ marginBottom: 16 }}>
           <h2>Customer identification</h2>
