@@ -51,7 +51,7 @@ Any approval stage ──reject (reason)──▶ REJECTED (initiator notified)
 | DISBURSEMENT_CORRECTION | CO3 | Resubmit (to same DO1) | — |
 | DISBURSEMENT_BOOKING | DO2 | Disbursed | — |
 | COMPLETION | CO3 | Complete Process | — |
-| VENDOR_CONFIRMATION | Initiator | Confirm vendor payment and end of process | — |
+| VENDOR_CONFIRMATION | Initiator | Confirm the sale is completed (customer has signed the Murabaha sale contract) and end the process; no CAD confirmation needed | Signed sale contract (Individual, Enterprise) |
 
 **Separation of duties.** Credit and approval stages exclude the initiator, the endorser and anyone who
 already decided on the case. DO1 excludes the pack CO3; DO2 excludes DO1. Super Admins cannot assign

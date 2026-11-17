@@ -40,7 +40,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   DISBURSEMENT_CORRECTION: "Disbursement correction (CO3)",
   DISBURSEMENT_BOOKING: "Disbursement booking (DO2)",
   COMPLETION: "Complete process (CO3)",
-  VENDOR_CONFIRMATION: "Vendor payment confirmation",
+  VENDOR_CONFIRMATION: "Sale completion (initiator)",
   CLOSED: "Closed",
   REJECTED: "Rejected",
 };
@@ -62,7 +62,7 @@ export const REQUIRED_ACTION: Record<Stage, string> = {
   DISBURSEMENT_CORRECTION: "Resolve disbursement correction and resubmit to DO1",
   DISBURSEMENT_BOOKING: "Record disbursement and click Disbursed",
   COMPLETION: "Complete Process",
-  VENDOR_CONFIRMATION: "Confirm vendor payment and end of process",
+  VENDOR_CONFIRMATION: "Confirm the sale is completed and end the process",
   CLOSED: "—",
   REJECTED: "—",
 };
@@ -111,7 +111,7 @@ export const ACTION_LABELS: Record<TaskAction, string> = {
   SEND_FOR_CORRECTION: "Send for Correction",
   DISBURSED: "Disbursed",
   COMPLETE_PROCESS: "Complete Process",
-  CONFIRM_VENDOR_PAYMENT: "Confirm vendor payment and end of process",
+  CONFIRM_VENDOR_PAYMENT: "Confirm sale completed",
   CLEAR_TO_PROCEED: "Clear to proceed",
   REQUEST_CLARIFICATION: "Request clarification",
   DECLINE: "Decline",

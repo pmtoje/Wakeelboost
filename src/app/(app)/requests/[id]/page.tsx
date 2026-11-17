@@ -435,7 +435,7 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
   );
 }
 
-/** Disbursed → Awaiting Vendor Payment Confirmation → Closed, with actor, time and notification status. */
+/** Disbursed → Awaiting sale completion → Closed, with actor, time and notification status. */
 function ClosureCard({ c, compact = false }: { c: Case; compact?: boolean }) {
   const app = c.app;
   if (!c.disbursement) {
@@ -469,8 +469,8 @@ function ClosureCard({ c, compact = false }: { c: Case; compact?: boolean }) {
       <ul className="checklist" style={{ marginBottom: 12 }}>
         {step(true, "Disbursed", `${formatKobo(d.amount_kobo)} on ${formatDateOnly(d.disbursed_on)} · ref ${d.transaction_ref} · recorded by ${d.recorded_by_name}, ${formatLagos(d.recorded_at)}`)}
         {step(!!app.process_completed_at, "Process completed (Credit Officer 3)", app.process_completed_at ? `${name(app.process_completed_by)}, ${formatLagos(app.process_completed_at)}` : "Pending")}
-        {step(!!app.vendor_confirmed_at, app.vendor_confirmed_at ? "Vendor payment confirmed" : "Awaiting Vendor Payment Confirmation", app.vendor_confirmed_at ? `${name(app.vendor_confirmed_by)}, ${formatLagos(app.vendor_confirmed_at)}` : "Initiator confirms after Credit Officer 3 completes the process")}
-        {step(app.status === "CLOSED", "Closed", app.closed_at ? `${formatLagos(app.closed_at)} · repayment prompts active` : "After vendor payment confirmation")}
+        {step(!!app.vendor_confirmed_at, app.vendor_confirmed_at ? "Sale completed" : "Awaiting sale completion", app.vendor_confirmed_at ? `${name(app.vendor_confirmed_by)}, ${formatLagos(app.vendor_confirmed_at)}` : "Initiator confirms once Credit Officer 3 has sent the pack and the customer has signed the sale contract")}
+        {step(app.status === "CLOSED", "Closed", app.closed_at ? `${formatLagos(app.closed_at)} · repayment prompts active` : "After the sale is confirmed completed")}
       </ul>
       {c.closure && (
         <p className="small" style={{ margin: "0 0 8px" }}>
@@ -1049,14 +1049,19 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
       body.push(<BookingForm key="b" hidden={hidden} approved={koboToNairaString(Number(app.requested_amount_kobo))} defaultDate={lagosDate(new Date())} doneHref={doneHref} />);
       break;
     case "COMPLETION":
-      body.push(<p key="t" className="small" style={{ margin: 0 }}>Queues one closure email with the full document pack and transaction summary to Legal and Shariah Compliance, copying the initiator. The initiator then confirms vendor payment separately.</p>);
-      body.push(<TaskButton key="c" hidden={hidden} action="COMPLETE_PROCESS" label="Complete Process" confirm="Send the closure pack to Legal and Shariah Compliance and hand the request to the initiator for vendor payment confirmation?" doneHref={doneHref} />);
+      body.push(<p key="t" className="small" style={{ margin: 0 }}>Queues one closure email with the full document pack and transaction summary to Legal and Shariah Compliance, copying the initiator. The request then returns to the initiator, who has the customer sign the Murabaha sale contract and confirms the sale is completed.</p>);
+      body.push(<TaskButton key="c" hidden={hidden} action="COMPLETE_PROCESS" label="Complete Process" confirm="Send the closure pack to Legal and Shariah Compliance and hand the request to the initiator to complete the sale?" doneHref={doneHref} />);
       break;
     case "VENDOR_CONFIRMATION":
-      body.push(<p key="t" className="small" style={{ margin: 0 }}>Confirm the vendor has been paid. This closes the request and activates repayment prompts.</p>);
+      body.push(<p key="t" className="small" style={{ margin: 0 }}>Credit Officer 3 has sent the pack. Have the customer sign the Murabaha sale contract, then confirm the sale is completed. This closes the request and activates repayment prompts. You don&apos;t need to wait for anyone else to confirm.</p>);
       body.push(await DisbursementDocs({ key: "docs", appId: app.id, applicantType: app.applicant_type, docs, forms: formsForStage("VENDOR_CONFIRMATION"), note: "The bank has paid the vendor, so it now owns the goods. The customer signs the Murabaha sale contract (with the receipt of asset in Appendix A) to buy them from the bank on instalments." }));
       body.push(<UploadPanel key="u" compact applicationId={app.id} title="Upload signed sale contract" categories={["POST_DISBURSEMENT", "SUPPORTING"].map((x) => ({ code: x, label: CATEGORY_LABEL[x] }))} />);
-      body.push(<TaskButton key="v" hidden={hidden} action="CONFIRM_VENDOR_PAYMENT" label="Confirm vendor payment and end of process" confirm="Confirm that the vendor has been paid and close this request?" doneHref={doneHref} />);
+      {
+        const saleTpl = await activeTemplate(db, app.applicant_type as ApplicantType, "POST_DISBURSEMENT");
+        const saleSigned = has("POST_DISBURSEMENT");
+        if (saleTpl && !saleSigned) body.push(<Blocked key="sb">Waiting for the signed Murabaha sale contract (sign on the tablet or upload the signed copy).</Blocked>);
+        body.push(<TaskButton key="v" hidden={hidden} action="CONFIRM_VENDOR_PAYMENT" label="Confirm sale completed" disabled={!!saleTpl && !saleSigned} confirm="Confirm the sale is completed (the customer has signed the sale contract and the goods have been delivered) and close this request?" doneHref={doneHref} />);
+      }
       break;
   }
 

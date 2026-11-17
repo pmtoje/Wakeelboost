@@ -6,7 +6,7 @@ import { exportReport, reportFilterSchema, reportScope, runReport } from "@/serv
 import { grantRole, updateMonthlySchedule } from "@/server/domain/admin";
 import { sendReminder } from "@/server/domain/workflow";
 import { currentMonthlyPeriod, currentWeeklyPeriod, runMonthlyReport, runWeeklyDigest } from "@/server/jobs/schedules";
-import { act, createSubmittedCase, ctxFor, driveToOffer, openTaskOf } from "@/server/demo/scenario";
+import { act, createSubmittedCase, ctxFor, driveToOffer, openTaskOf, uploadSignedSaleContract } from "@/server/demo/scenario";
 import { addDaysToDateString, fromLagos, lagosDate } from "@/server/time";
 import { audits, key, outbox, resetDb, staffId } from "./helpers";
 
@@ -170,6 +170,7 @@ describe("scheduled emails", () => {
     expect((await runWeeklyDigest(new Date(monday.getTime() + 120_000))).ran).toBe(false);
     expect((await outbox("WEEKLY_DIGEST")).length).toBe(1);
 
+    await uploadSignedSaleContract(id, new Date(monday.getTime() + 3500_000));
     await act(id, "CONFIRM_VENDOR_PAYMENT", {}, new Date(monday.getTime() + 3600_000));
     const nextWeek = new Date(monday.getTime() - 7 * 86400_000 + 60_000);
     expect(currentWeeklyPeriod(nextWeek).startDate).toBe("2026-06-01");

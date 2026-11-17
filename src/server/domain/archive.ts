@@ -205,7 +205,7 @@ async function facilityRecord(q: Db, app: Record<string, any>, manifest: { path:
   // Completion
   const cp = wb.addWorksheet("Completion");
   const ce = (await q.query("SELECT c.*, o.status AS delivery_status, o.sent_at FROM closure_events c LEFT JOIN notification_outbox o ON o.id = c.outbox_id WHERE c.application_id = $1", [app.id])).rows[0];
-  cp.addRow(["Process completed", "By", "Closure email to", "Delivery", "Sent", "Vendor payment confirmed"]).font = { bold: true };
+  cp.addRow(["Process completed", "By", "Closure email to", "Delivery", "Sent", "Sale completion confirmed"]).font = { bold: true };
   if (ce) cp.addRow([formatLagos(ce.completed_at), who(ce.completed_by), (ce.groups ?? []).join(", "), `${ce.delivery_mode} · ${ce.delivery_status ?? ""}`, ce.sent_at ? formatLagos(ce.sent_at) : "", app.vendor_confirmed_at ? formatLagos(app.vendor_confirmed_at) : ""]);
 
   // Audit trail (already sanitised at write time: identifiers masked)

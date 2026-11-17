@@ -53,7 +53,7 @@ export default async function SignPage({ params }: { params: Promise<{ id: strin
       <>
         <PageHeader eyebrow={`${app.ref} · ${app.customer_name}`} title={`Sign the ${label.toLowerCase().replace("murabaha", "Murabaha")}`} />
         <div className="card stack">
-          <p style={{ margin: 0 }}>There is no prepared {label.toLowerCase().replace("murabaha", "Murabaha")} to sign yet. {docType === "OFFER_LETTER" ? "The offer letter is issued automatically after Divisional Head approval." : docType === "POST_DISBURSEMENT" ? "The sale contract is prepared once the request reaches vendor payment confirmation." : "Prepare the forms from the request, or upload the bank's signed form."}</p>
+          <p style={{ margin: 0 }}>There is no prepared {label.toLowerCase().replace("murabaha", "Murabaha")} to sign yet. {docType === "OFFER_LETTER" ? "The offer letter is issued automatically after Divisional Head approval." : docType === "POST_DISBURSEMENT" ? "The sale contract is prepared once Credit Officer 3 has completed the process and the request is back with the initiator for sale completion." : "Prepare the forms from the request, or upload the bank's signed form."}</p>
           <div>{back}</div>
         </div>
       </>

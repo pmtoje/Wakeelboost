@@ -79,7 +79,7 @@ The test suite has 274 tests, including 48 rows recalculated from the bank's APR
 
 - **Routing:** boundary amounts, all three routes end to end, every endorsement path, random eligibility and separation of duties, and unstaffed stages with admin resolution.
 - **Workflow rules:** correction and rejection routing, material-change invalidation, the three-report, APR and invoice gates, the production APR block, and the pack, insurance and CRMS gates.
-- **Disbursement and closure:** duplicate-disbursement prevention, closure dedupe and retry, vendor confirmation and repayment prompts.
+- **Disbursement and closure:** duplicate-disbursement prevention, closure dedupe and retry, sale completion by the initiator and repayment prompts.
 - **Documents and offers:** offer rendering for each entity type, APR fixtures and propagation into emails, and scoped document access with version retention.
 - **Bank directory:** CSV/Excel parsing with header aliases, row validation, preview, merge vs full replace (deactivate, never delete) and admin-only, audited imports.
 - **Platform:** OTP and idle expiry for every role (polling does not extend sessions), deep-link safety, report exports, audit metadata, reminders, and digest scheduling.
@@ -138,7 +138,7 @@ The UI follows the accepted landing reference and the UI handoff. It has:
 - a full-bleed merchant photograph on the sign-in, OTP, expired-session and error screens, with the exact landing copy
 - a compact side navigation scoped by role, with a mobile menu and a profile menu holding the workspace switcher and sign-out
 - request pages with a progress timeline and Overview / Documents / Assessment / Activity tabs, and a sticky action panel showing each gate and the exact reason an action is blocked
-- uploads with progress and retry, a confirmation summary before **Disbursed**, and Disbursed → Awaiting Vendor Payment Confirmation → Closed states
+- uploads with progress and retry, a confirmation summary before **Disbursed**, and Disbursed → Awaiting sale completion → Closed states
 - tables that become cards on phones
 
 The RM / ANM / Merchant Officer / Staff choice is on the OTP step ("Open workspace"), so the landing page keeps the reference's single email field.

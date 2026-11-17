@@ -111,7 +111,7 @@ async function assertSigningTask(q: Db, ctx: Ctx, appId: string, stages: string[
   if (!task || !stages.includes(task.stage) || task.assignee_id !== actor.staffId || !(await holdsRole(q, actor.staffId, task.assignee_role))) {
     throw forbidden(
       stages.length === 1 && stages[0] === "VENDOR_CONFIRMATION"
-        ? "The Murabaha sale contract is signed on the tablet by the initiator at vendor payment confirmation."
+        ? "The Murabaha sale contract is signed on the tablet by the initiator at sale completion."
         : "Documents are signed on the tablet by the initiator at offer pack preparation.",
     );
   }
@@ -253,7 +253,7 @@ export async function signOnTablet(ctx: Ctx, appId: string, docType: Disbursemen
   }
 }
 
-/** Worker: prepare the sale contract for requests waiting at vendor payment confirmation (retries failures every 15 minutes). */
+/** Worker: prepare the sale contract for requests waiting at sale completion (retries failures every 15 minutes). */
 export async function processDueSaleContracts(now = new Date()): Promise<number> {
   const due = (
     await db.query<{ id: string }>(

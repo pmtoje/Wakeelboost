@@ -52,7 +52,7 @@ The facility application, document uploads (other than the consent form) and sub
 until the credit check clears. The submitted application must carry the credit-checked BVN.
 Then: business endorsement → credit reviews → Unit Head → Divisional Head → **Murabaha offer letter
 generated automatically** → initiator shares it and uploads the signed copy → pack review →
-disbursement → completion → vendor confirmation → **facility ZIP archive generated automatically**.
+disbursement → completion → sale completion (initiator) → **facility ZIP archive generated automatically**.
 
 ## Credit rules (Super Admin → Credit check (SeedFi))
 
@@ -80,7 +80,7 @@ not received.
 - **Production** needs LibreOffice for the signed PDF (as for offer letters).
 - **Bank agreements installed (17 Nov 2026).** From the bank's Word files, converted by `scripts/build-agreement-templates.py` into `templates/agreements/` and seeded active and approved (run `npm run seed`; it adds them once, matched by source file):
   - *Murabaha pre-disbursement agreement*: Individual, Enterprise and Company. Prepared with the offer letter and signed at offer pack preparation.
-  - *Murabaha (sale) contract, post-disbursement (MetLaw edits)*: Individual and Enterprise, with Appendix A (receipt of asset). Prepared when the request reaches **vendor payment confirmation** (the bank has paid the vendor and owns the goods) and signed there by the initiator with the customer. The worker retries preparation if it fails.
+  - *Murabaha (sale) contract, post-disbursement (MetLaw edits)*: Individual and Enterprise, with Appendix A (receipt of asset). Prepared when Credit Officer 3 completes the process and the request returns to the initiator for **sale completion**, and signed there by the customer. The initiator then confirms the sale is completed (formerly "confirm vendor payment"); no CAD confirmation is needed, and the signed sale contract is required for Individual and Enterprise customers. The worker retries preparation if it fails.
   - Filled from the facility record: agreement date, offer letter date, customer party (name, trading name, address / company), goods, cost price, contract (sale) price, markup, monthly instalment, tenor, asset table (one numbered row per item, taken from the application's *Items to finance*; the table grows to fit) and the customer's AltBank account (new optional field on the application; a dotted line when not captured).
   - Also filled: the bank's two signatories (Name / Title, the same officers who sign the offer letter) and, on the Company agreement, the first two directors' names.
   - Left for completion by hand: the security deposit (Hamish Jiddiyah) amount and percentage, and the witness lines (or signed on the tablet signature page).

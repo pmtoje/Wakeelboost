@@ -198,10 +198,10 @@ describe("disbursement documents", () => {
     await expect(createDocxTemplateVersion(await ctxFor("superadmin@altbank.ng"), { name: "Bad form", applicantType: "ALL", docType: "GSI_FORM", filename: "f.docx", data, productionApproved: true })).rejects.toThrow(/interest/i);
   });
 
-  it("prepares the Murabaha sale contract only after the vendor is paid, and the initiator signs it there", async () => {
+  it("prepares the Murabaha sale contract only at sale completion, and the initiator signs it there", async () => {
     const id = await offerReady();
     const ctx = await ctxFor(RM);
-    await expect(signOnTablet(ctx, id, "POST_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/vendor payment confirmation/);
+    await expect(signOnTablet(ctx, id, "POST_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/at sale completion/);
     expect((await db.query("SELECT count(*)::int AS n FROM documents WHERE application_id = $1 AND category = 'PREFILLED_POST_DISBURSEMENT'", [id])).rows[0].n).toBe(0);
     await driveToVendorConfirmation(id);
     // The worker prepares it (inline generation is off in tests).
@@ -224,6 +224,9 @@ describe("disbursement documents", () => {
     expect((await db.query("SELECT category FROM documents WHERE id = $1", [s.documentId])).rows[0].category).toBe("POST_DISBURSEMENT");
     // Offer-stage documents can no longer be signed
     await expect(signOnTablet(ctx, id, "PRE_DISBURSEMENT", [{ role: "CUSTOMER", name: "Busayo Okon", signaturePng: signaturePng() }])).rejects.toThrow(/offer pack preparation/);
+    // With the signed contract filed, the initiator confirms the sale is completed and the request closes.
+    await act(id, "CONFIRM_VENDOR_PAYMENT");
+    expect((await db.query("SELECT status FROM applications WHERE id = $1", [id])).rows[0].status).toBe("CLOSED");
   });
 
   it("the bank's agreement templates are seeded active and approved", async () => {

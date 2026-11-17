@@ -22,6 +22,7 @@ import { formatKobo } from "../money";
 import { addDaysToDateString, isValidDateString, lagosDate, formatLagos } from "../time";
 import { enqueueEmail } from "../notify/outbox";
 import { kickOfferLetter, liveOfferLetter, requestOfferLetter } from "./offer-letters";
+import { activeTemplate } from "./offer";
 import { INACTIVE_NOTE, assertCheckedIdentity, creditCheckActive, originationOpen, waitingOnInactiveCheck } from "./credit-check";
 import { kickArchive, openRepository, queueArchive } from "./archive";
 import { simpleEmail, caseLink } from "../notify/templates";
@@ -809,7 +810,13 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
       return completeProcess(tx, ctx, app, task);
     case "VENDOR_CONFIRMATION": {
       const st = (await tx.query("SELECT process_completed_at FROM applications WHERE id = $1", [app.id])).rows[0];
-      if (!st.process_completed_at) throw gate("Credit Officer 3 must complete the process first.");
+      if (!st.process_completed_at) throw gate("Credit Officer 3 must complete the process (send the pack) first.");
+      // The sale is completed by the customer signing the Murabaha sale contract (where the bank has one for this applicant type).
+      const saleTpl = await activeTemplate(tx, app.applicant_type, "POST_DISBURSEMENT");
+      if (saleTpl) {
+        const signedSale = (await tx.query("SELECT 1 FROM documents WHERE application_id = $1 AND category = 'POST_DISBURSEMENT' AND superseded_at IS NULL AND scan_status = 'CLEAN'", [app.id])).rowCount;
+        if (!signedSale) throw gate("The customer must sign the Murabaha sale contract first: sign it on the tablet or upload the signed copy.");
+      }
       await recordDecision(tx, ctx, app, task, a, reason);
       await completeTask(tx, ctx, task, a);
       await tx.query(
@@ -821,7 +828,7 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
       await audit(tx, ctx, { action: "REPAYMENT_PROMPTS_ACTIVATED", applicationId: app.id, stage: "CLOSED" });
       // Completed facility: queue its consolidated ZIP archive (generated after commit, retried by the worker).
       await queueArchive(tx, ctx, app.id);
-      return "Vendor payment confirmed. The request is closed and repayment prompts are active.";
+      return "Sale completed. The request is closed and repayment prompts are active.";
     }
     default:
       throw invalid("No action is available at this stage.");

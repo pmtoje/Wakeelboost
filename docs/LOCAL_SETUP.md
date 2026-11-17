@@ -63,7 +63,7 @@ Sessions end after 5 minutes without activity; just sign in again.
 | Email | What you can do |
 |---|---|
 | `superadmin@altbank.ng` | Staff and roles, pricing settings, offer templates (approve for production), audit |
-| `rm.ade@altbank.ng` | Relationship Manager: start requests, offer pack, vendor confirmation |
+| `rm.ade@altbank.ng` | Relationship Manager: start requests, offer pack, sale completion |
 | `anm.south@altbank.ng` | Agent Network Manager with request **WB-2026-001004** at offer preparation |
 | `rbe.lagos@altbank.ng` | Business endorsement |
 | `co1@altbank.ng`, `co2@altbank.ng`, `co3@altbank.ng` | Credit Officers (assessment, DSR, approvals) |

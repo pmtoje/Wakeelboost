@@ -7,7 +7,7 @@ import { caseAccess } from "@/server/domain/access";
 import { processOutbox, retryOutbox } from "@/server/jobs/outbox";
 import { setMailTransportForTests } from "@/server/notify/transport";
 import { bookedRequests, repaymentPrompts } from "@/server/domain/views";
-import { act, appRow, createSubmittedCase, ctxFor, driveToOffer, makePdf, openTaskOf, preparePack } from "@/server/demo/scenario";
+import { act, appRow, createSubmittedCase, ctxFor, driveToOffer, makePdf, openTaskOf, preparePack, uploadSignedSaleContract } from "@/server/demo/scenario";
 import { addDaysToDateString, lagosDate } from "@/server/time";
 import { key, outbox, resetDb, staffId } from "./helpers";
 
@@ -96,10 +96,13 @@ describe("closure actions", () => {
     const ev = await db.query("SELECT * FROM closure_events WHERE application_id = $1", [id]);
     expect(ev.rows).toHaveLength(1);
 
-    // Vendor confirmation is a separate initiator action that closes the case.
+    // Sale completion is the initiator's action (no CAD confirmation) and closes the case.
     let app = await appRow(id);
     expect(app.process_completed_by).toBe(await staffId("co3@altbank.ng"));
     expect(app.status).toBe("BOOKED");
+    // The sale is completed only once the customer has signed the Murabaha sale contract.
+    await expect(act(id, "CONFIRM_VENDOR_PAYMENT")).rejects.toThrow(/sale contract/);
+    await uploadSignedSaleContract(id);
     await act(id, "CONFIRM_VENDOR_PAYMENT");
     app = await appRow(id);
     expect(app.status).toBe("CLOSED");

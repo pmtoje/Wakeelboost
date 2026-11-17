@@ -40,7 +40,7 @@ export default async function Booked({ searchParams }: { searchParams: Promise<R
       <form className="filters" method="get" role="search" aria-label="Filter booked requests">
         <div className="field"><label htmlFor="bq">Search</label><input id="bq" name="q" type="search" defaultValue={sp.q ?? ""} placeholder="Request, customer or reference" /></div>
         <div className="field"><label htmlFor="bs">Status</label><select id="bs" name="status" defaultValue={sp.status ?? ""}><option value="">Any</option><option value="BOOKED">Booked (not closed)</option><option value="CLOSED">Closed</option></select></div>
-        <div className="field"><label htmlFor="bv">Vendor confirmation</label><select id="bv" name="vendor" defaultValue={sp.vendor ?? ""}><option value="">Any</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option></select></div>
+        <div className="field"><label htmlFor="bv">Sale completion</label><select id="bv" name="vendor" defaultValue={sp.vendor ?? ""}><option value="">Any</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option></select></div>
         <div className="field"><label htmlFor="bf">Booked from</label><input id="bf" name="from" type="date" defaultValue={sp.from ?? ""} /></div>
         <div className="field"><label htmlFor="bt">Booked to</label><input id="bt" name="to" type="date" defaultValue={sp.to ?? ""} /></div>
         <button className="btn">Apply</button>
@@ -49,7 +49,7 @@ export default async function Booked({ searchParams }: { searchParams: Promise<R
       <div className="metric-grid" style={{ marginBottom: 16 }}>
         <div className="metric"><div className="k">Bookings{filtered ? " (filtered)" : ""}</div><div className="v">{rows.length}</div></div>
         <div className="metric"><div className="k">Disbursed</div><div className="v">{formatKobo(totalDisbursed)}</div></div>
-        <div className="metric"><div className="k">Vendor confirmation pending</div><div className="v">{pendingVendor}</div></div>
+        <div className="metric"><div className="k">Sale completion pending</div><div className="v">{pendingVendor}</div></div>
       </div>
       {prompts.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -76,7 +76,7 @@ export default async function Booked({ searchParams }: { searchParams: Promise<R
               <th>Transaction ref</th>
               <th>Booking date</th>
               <th>Status</th>
-              <th>Vendor confirmation</th>
+              <th>Sale completion</th>
               <th>Payment schedule</th>
             </tr>
           </thead>
@@ -107,7 +107,7 @@ export default async function Booked({ searchParams }: { searchParams: Promise<R
                 <td data-label="Status">
                   <StageChip stage={r.stage as Stage} status={r.status} />
                 </td>
-                <td data-label="Vendor confirmation">{r.vendor_confirmed_at ? <span className="badge badge-green">Confirmed</span> : <span className="badge badge-warn">Pending</span>}</td>
+                <td data-label="Sale completion">{r.vendor_confirmed_at ? <span className="badge badge-green">Confirmed</span> : <span className="badge badge-warn">Pending</span>}</td>
                 <td className="small nowrap" data-label="Payment schedule">
                   {(r.schedule ?? []).map((s: { seq: number; due: string; amount: string }) => (
                     <div key={s.seq}>

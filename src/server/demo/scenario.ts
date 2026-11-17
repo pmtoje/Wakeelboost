@@ -238,5 +238,11 @@ export async function driveToClosed(appId: string, now = new Date(), txRef = `TR
     },
   }, now);
   await act(appId, "COMPLETE_PROCESS", {}, now);
+  await uploadSignedSaleContract(appId, now);
   await act(appId, "CONFIRM_VENDOR_PAYMENT", {}, now);
+}
+/** Initiator at sale completion: file the customer-signed Murabaha sale contract. */
+export async function uploadSignedSaleContract(appId: string, now = new Date()) {
+  const t = await openTaskOf(appId);
+  await uploadDocument(await ctxFor(t.email!, now), { applicationId: appId, category: "POST_DISBURSEMENT", filename: "signed-sale-contract.pdf", data: makePdf("Signed Murabaha sale contract") });
 }

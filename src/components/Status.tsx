@@ -16,7 +16,7 @@ export function stagePresentation(stage: Stage, status?: string): { label: strin
     case "COMPLETION":
       return { label: "Disbursed", tone: "badge-green", Icon: Wallet };
     case "VENDOR_CONFIRMATION":
-      return { label: "Awaiting Vendor Payment Confirmation", tone: "badge-warn", Icon: PackageCheck };
+      return { label: "Awaiting sale completion", tone: "badge-warn", Icon: PackageCheck };
     case "INITIATOR_CORRECTION":
     case "CREDIT_CORRECTION":
     case "DISBURSEMENT_CORRECTION":

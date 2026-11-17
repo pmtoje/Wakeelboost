@@ -33,7 +33,7 @@ export default async function Schedules() {
       <div className="grid-2">
         <div className="card">
           <h2>Weekly initiator digest</h2>
-          <p className="small">Sunday midnight as Monday begins (Africa/Lagos). Summarises the initiator&apos;s successful disbursements and repayments due Monday–Sunday. Repayment prompts start after vendor payment confirmation.</p>
+          <p className="small">Sunday midnight as Monday begins (Africa/Lagos). Summarises the initiator&apos;s successful disbursements and repayments due Monday–Sunday. Repayment prompts start once the initiator confirms the sale is completed.</p>
           <p className="small">Next run: <strong>{formatLagos(nextWeekly)}</strong></p>
         </div>
         <div className="card">
