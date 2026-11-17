@@ -23,6 +23,7 @@ import { addDaysToDateString, isValidDateString, lagosDate, formatLagos } from "
 import { enqueueEmail } from "../notify/outbox";
 import { kickOfferLetter, liveOfferLetter, requestOfferLetter } from "./offer-letters";
 import { ORIGINATION_ALLOWED, assertCheckedIdentity } from "./credit-check";
+import { kickArchive, openRepository, queueArchive } from "./archive";
 import { simpleEmail, caseLink } from "../notify/templates";
 import {
   BVN_RE,
@@ -201,6 +202,8 @@ export async function createDraft(ctx: Ctx, p: { initiatorRole: string; applican
       [app.id, JSON.stringify(draftDataSchema.parse({})), actor.staffId, ctx.now],
     );
     await audit(tx, ctx, { action: "DRAFT_CREATED", actorRole: p.initiatorRole, applicationId: app.id, stage: "DRAFT", details: { ref, applicantType: p.applicantType } });
+    // The facility's document repository opens with its reference.
+    await openRepository(tx, ctx, app.id);
     return { id: app.id, ref };
   });
 }
@@ -506,6 +509,9 @@ export async function performTaskAction(ctx: Ctx, input: TaskActionInput): Promi
         return { applicationId: app.id, stage: app.stage, message };
       });
     });
+    if (result.stage === "CLOSED") {
+      void kickArchive(result.applicationId).catch((e) => console.error("[archive] inline generation failed", e));
+    }
     if (result.stage === "OFFER_PREPARATION") {
       // Issue the Murabaha letter straight away; the worker retries if this attempt fails.
       void kickOfferLetter(result.applicationId).catch((e) => console.error("[offer-letter] inline generation failed", e));
@@ -768,6 +774,8 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
       app.status = "CLOSED";
       await moveTo(tx, ctx, app, "CLOSED", null);
       await audit(tx, ctx, { action: "REPAYMENT_PROMPTS_ACTIVATED", applicationId: app.id, stage: "CLOSED" });
+      // Completed facility: queue its consolidated ZIP archive (generated after commit, retried by the worker).
+      await queueArchive(tx, ctx, app.id);
       return "Vendor payment confirmed. The request is closed and repayment prompts are active.";
     }
     default:

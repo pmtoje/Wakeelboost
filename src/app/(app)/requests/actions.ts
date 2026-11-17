@@ -8,6 +8,7 @@ import { parseCalculatorForm, recordAssessment } from "@/server/domain/assessmen
 import { generateOffer } from "@/server/domain/offer";
 import { revealIdentifiers } from "@/server/domain/views";
 import { runCreditCheck } from "@/server/domain/credit-check";
+import { retryArchive } from "@/server/domain/archive";
 import { invalid } from "@/server/errors";
 import { parseNairaToKobo } from "@/server/money";
 import type { TaskAction } from "@/server/domain/stages";
@@ -196,6 +197,16 @@ export async function creditCheckAction(_p: ActionState, fd: FormData): Promise<
       str(fd, "idempotencyKey"),
     );
     return r.status === "UNAVAILABLE" ? { ok: false, error: r.message, nonce: Date.now() } : { ok: true, message: r.message, nonce: Date.now() };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function archiveAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx } = await requireUser();
+  try {
+    await retryArchive(ctx, str(fd, "applicationId"));
+    return { ok: true, message: "Facility archive generated.", nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
   }

@@ -5,6 +5,7 @@ import { auditOutsideTx } from "../audit";
 import { decryptField } from "../crypto";
 import { forbidden, notFound } from "../errors";
 import { maskWithLast4 } from "../mask";
+import { archiveFor } from "./archive";
 import { canSeeCreditDetail, creditResponseDetail, latestCreditCheck } from "./credit-check";
 import { caseAccess } from "./access";
 import { latestAssessment } from "./assessment";
@@ -197,6 +198,7 @@ export async function getCase(ctx: Ctx, appId: string) {
   await auditOutsideTx(ctx, { action: "CASE_VIEW", applicationId: appId, stage: app.stage, details: { capacities: access.capacities } });
   return {
     app,
+    archive: await archiveFor(db, appId),
     credit: creditCheck ? { check: creditCheck, detail: creditDetail, narration: creditDetail ? creditResponseDetail(creditCheck).narration : null } : null,
     access,
     version,

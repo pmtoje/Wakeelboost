@@ -34,6 +34,7 @@ export const DOC_CATEGORIES: DocCategory[] = [
   { code: "INSURANCE_SIGNED", label: "Customer-signed insurance document", multiple: false },
   { code: "INSURANCE_EVIDENCE", label: "Evidence of insurance (Credit Officer 3)", multiple: false },
   { code: "SUPPORTING", label: "Other supporting document", multiple: true },
+  { code: "FACILITY_ARCHIVE", label: "Facility archive (ZIP)", multiple: false },
 ];
 export const CATEGORY_LABEL = Object.fromEntries(DOC_CATEGORIES.map((c) => [c.code, c.label])) as Record<string, string>;
 
@@ -169,7 +170,7 @@ export async function uploadDocument(ctx: Ctx, input: UploadInput): Promise<{ id
   if (input.data.length > config.maxUploadBytes) throw invalid(`The file exceeds the ${Math.round(config.maxUploadBytes / 1048576)} MB limit.`);
   const mime = sniffAllowedType(filename, input.data);
   if (!mime) throw invalid(`Unsupported or mismatched file type. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}.`);
-  if (input.category === "GENERATED_OFFER" || input.category === "GENERATED_OFFER_PDF") throw forbidden("Generated offers are produced by the system.");
+  if (input.category === "GENERATED_OFFER" || input.category === "GENERATED_OFFER_PDF" || input.category === "FACILITY_ARCHIVE") throw forbidden("Generated documents are produced by the system.");
 
   const quarantineKey = `quarantine/${input.applicationId}/${randomUUID()}`;
   try {
@@ -352,7 +353,7 @@ export async function readDocumentForActor(ctx: Ctx, docId: string, mode: "view"
   if (doc.purged_at) throw notFound("This document was purged under the retention policy.");
   const data = await objectStore().get(doc.storage_key);
   await auditOutsideTx(ctx, {
-    action: mode === "view" ? "DOCUMENT_VIEW" : "DOCUMENT_DOWNLOAD",
+    action: doc.category === "FACILITY_ARCHIVE" ? "FACILITY_ARCHIVE_DOWNLOADED" : mode === "view" ? "DOCUMENT_VIEW" : "DOCUMENT_DOWNLOAD",
     applicationId: doc.application_id,
     documentId: doc.id,
     documentVersion: doc.version_no,

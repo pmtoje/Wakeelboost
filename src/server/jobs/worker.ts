@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { systemCtx } from "../context";
 import { processDueOfferLetters } from "../domain/offer-letters";
+import { processDueArchives } from "../domain/archive";
 import { auditOutsideTx } from "../audit";
 import { config } from "../config";
 import { objectStore } from "../storage";
@@ -35,6 +36,7 @@ export async function retentionSweep(now = new Date()) {
 export async function workerTick(now = new Date()) {
   const results: Record<string, unknown> = {};
   results.offerLetters = await processDueOfferLetters(now);
+  results.archives = await processDueArchives(now);
   results.outbox = await processOutbox(now);
   results.weekly = await runWeeklyDigest(now);
   results.monthly = await runMonthlyReport(now);

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Calculator, CheckCircle2, Eye, FilePlus2, Pencil, ShieldCheck } from "lucide-react";
 import { ActionForm, FormMessages, ReasonAction, SubmitButton, type FormState } from "@/components/forms";
-import { assessmentAction, generateOfferAction, reminderAction, revealAction, taskActionAction } from "../actions";
+import { archiveAction, assessmentAction, generateOfferAction, reminderAction, revealAction, taskActionAction } from "../actions";
 
 type Hidden = Record<string, string>;
 const Hiddens = ({ h }: { h: Hidden }) => (
@@ -457,3 +457,12 @@ export function RevealIdentifiers({ applicationId }: { applicationId: string }) 
   );
 }
 
+
+export function RetryArchiveButton({ applicationId, label }: { applicationId: string; label: string }) {
+  return (
+    <ActionForm action={archiveAction} className="row">
+      <input type="hidden" name="applicationId" value={applicationId} />
+      <SubmitButton className="btn btn-sm">{label}</SubmitButton>
+    </ActionForm>
+  );
+}

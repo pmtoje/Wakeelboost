@@ -19,6 +19,7 @@ import { config } from "@/server/config";
 import { StageChip, OutcomeChip } from "@/components/Status";
 import { activeTemplate } from "@/server/domain/offer";
 import { liveOfferLetter } from "@/server/domain/offer-letters";
+import { archiveFilename } from "@/server/domain/archive";
 import { PricingAssessment, ThresholdChip, pricingOf } from "@/components/PricingAssessment";
 import { CreditCheckResult, CreditStatusChip } from "@/components/CreditCheck";
 import { bandLabels, e4ToPercent, pricingSettingsAt } from "@/server/domain/pricing";
@@ -29,7 +30,7 @@ function monthlyEquivalent(c: { instalments: unknown[]; assessment: { inputs: un
   return c.instalments.length > 0 && c.instalments.length !== tenor;
 }
 import { UploadPanel } from "@/components/UploadPanel";
-import { AssessmentForm, BookingForm, CrmsOkay, FirstReviewApprove, OfferLetterPanel, ReasonButton, ReminderButton, RevealIdentifiers, TaskButton } from "./CaseClient";
+import { AssessmentForm, BookingForm, CrmsOkay, FirstReviewApprove, OfferLetterPanel, ReasonButton, RetryArchiveButton, ReminderButton, RevealIdentifiers, TaskButton } from "./CaseClient";
 
 type Case = Awaited<ReturnType<typeof getCase>>;
 type SP = Record<string, string | undefined>;
@@ -487,8 +488,32 @@ function Documents({ c, link, tabHref, previewId, myTask, isInitiator }: { c: Ca
   const uploadStage = myTask ? (myTask.stage as Stage) : isInitiator && stage === "DRAFT" ? "DRAFT" : null;
   const cats = uploadStage ? (UPLOADABLE_BY_STAGE[uploadStage] ?? []).filter((x) => !(c.app.applicant_type === "INDIVIDUAL" && x === "CAC_CERTIFICATE")) : [];
   const current = c.documents.filter((d) => !d.superseded_at && d.scan_status !== "REJECTED");
+  const ar = c.archive;
   return (
     <div className="stack">
+      {ar && (
+        <div className="summary-box archive-box">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div>
+              <p className="eyebrow" style={{ margin: 0 }}>Facility archive</p>
+              <strong>{ar.filename ?? archiveFilename(c.app.customer_name, c.app.ref)}</strong>
+            </div>
+            <span className={`badge ${ar.status === "COMPLETE" ? "badge-green" : ar.status === "FAILED" ? "badge-red" : ar.status === "QUEUED" ? "badge-blue" : ""}`}>
+              {ar.status === "COMPLETE" ? "Complete" : ar.status === "FAILED" ? "Generation failed" : ar.status === "QUEUED" ? "Generating" : "In progress"}
+            </span>
+          </div>
+          <p className="small muted" style={{ margin: "6px 0 0" }}>
+            {ar.status === "COMPLETE" && <>Generated {formatLagos(ar.generated_at!)} · {ar.file_count} files · {(Number(ar.size_bytes) / 1048576).toFixed(2)} MB{ar.generation_no > 1 ? ` · generation ${ar.generation_no}` : ""}</>}
+            {ar.status === "IN_PROGRESS" && <>Repository opened {formatLagos(ar.opened_at)}. Documents are filed here as the facility progresses; the consolidated ZIP is generated automatically when the facility closes.</>}
+            {ar.status === "QUEUED" && <>The facility is complete; the archive is being generated.</>}
+            {ar.status === "FAILED" && <>{ar.last_error} ({ar.attempts} attempt{ar.attempts === 1 ? "" : "s"}). The facility record is unaffected.</>}
+          </p>
+          <div className="row" style={{ marginTop: 8 }}>
+            {ar.status === "COMPLETE" && ar.document_id && <a className="btn btn-sm btn-primary" href={link(ar.document_id, "download")}><Download className="icon" aria-hidden="true" /> Download ZIP</a>}
+            {c.app.status === "CLOSED" && (ar.status === "FAILED" || ar.status === "COMPLETE") && <RetryArchiveButton applicationId={c.app.id} label={ar.status === "FAILED" ? "Retry generation" : "Regenerate"} />}
+          </div>
+        </div>
+      )}
       <div className="table-wrap">
         <table className="data responsive">
           <caption className="sr-only">All documents retained on this request</caption>
