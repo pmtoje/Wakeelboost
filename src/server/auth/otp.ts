@@ -126,6 +126,13 @@ export async function requestOtp(ctx: Ctx, rawEmail: string): Promise<{ message:
     await audit(tx, ctx, { action: "OTP_REQUEST", actorId: staff.id, actorEmail: email, details: { challengeId: c.rows[0].id } });
     return c.rows[0].id;
   });
+  // Sent without awaiting (security review M14): the response time must not reveal whether the email
+  // belongs to staff. Failures are audited; the person simply requests a new code.
+  void sendCode(ctx, email, staff.id, challenge, code).catch((e) => console.error("[otp] code email could not be audited", e instanceof Error ? e.message : e));
+  return { message: GENERIC_OTP_MESSAGE };
+}
+
+async function sendCode(ctx: Ctx, email: string, staffId: string, challenge: string, code: string) {
   try {
     await mailTransport().send({
       to: [email],
@@ -138,11 +145,10 @@ export async function requestOtp(ctx: Ctx, rawEmail: string): Promise<{ message:
       ]),
       attachments: [],
     });
-    await auditOutsideTx(ctx, { action: "EMAIL_SENT", actorId: staff.id, actorEmail: email, details: { kind: "OTP", challengeId: challenge } });
+    await auditOutsideTx(ctx, { action: "EMAIL_SENT", actorId: staffId, actorEmail: email, details: { kind: "OTP", challengeId: challenge } });
   } catch (err) {
-    await auditOutsideTx(ctx, { action: "EMAIL_FAILED", outcome: "FAILURE", actorId: staff.id, actorEmail: email, details: { kind: "OTP", error: String(err).slice(0, 200) } });
+    await auditOutsideTx(ctx, { action: "EMAIL_FAILED", outcome: "FAILURE", actorId: staffId, actorEmail: email, details: { kind: "OTP", error: String(err).slice(0, 200) } });
   }
-  return { message: GENERIC_OTP_MESSAGE };
 }
 
 export interface VerifiedLogin {

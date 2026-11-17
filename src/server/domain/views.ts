@@ -1,3 +1,4 @@
+import { expandRegions } from "./roles";
 import type { Db } from "../db";
 import { db } from "../db";
 import type { Ctx } from "../context";
@@ -110,13 +111,18 @@ export async function initiatorRequests(q: Db, staffId: string) {
   ).rows;
 }
 
-export async function bookedRequests(q: Db, opts: { initiatorId?: string | null }) {
+export async function bookedRequests(q: Db, opts: { initiatorId?: string | null; regions?: string[] | null }) {
   const params: unknown[] = [];
-  let where = "TRUE";
+  const conds: string[] = [];
   if (opts.initiatorId) {
     params.push(opts.initiatorId);
-    where = `a.initiator_id = $1`;
+    conds.push("a.initiator_id = $" + params.length);
   }
+  if (opts.regions) {
+    params.push(expandRegions(opts.regions));
+    conds.push("a.region = ANY($" + params.length + "::text[])");
+  }
+  const where = conds.length ? conds.join(" AND ") : "TRUE";
   const rows = (
     await q.query(
       `SELECT a.id, a.ref, a.customer_name, a.requested_amount_kobo, a.status, a.stage, a.vendor_confirmed_at, a.process_completed_at, a.repayment_prompts_active_at,
@@ -228,10 +234,14 @@ export async function getCase(ctx: Ctx, appId: string) {
 export async function revealIdentifiers(ctx: Ctx, appId: string) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
+  // Need-to-know (security review M6): the initiator, the officer holding the case now, and the
+  // credit decision-makers on this case. Other viewers (Legal, Shariah, earlier assignees) see masked values.
   const access = await caseAccess(db, actor.staffId, appId);
-  if (!access.canView) {
+  const current = (await db.query("SELECT 1 FROM tasks WHERE application_id = $1 AND status = 'OPEN' AND assignee_id = $2", [appId, actor.staffId])).rowCount;
+  const allowed = access.canView && (access.capacities.includes("INITIATOR") || !!current || (await canSeeCreditDetail(db, actor.staffId, appId)));
+  if (!allowed) {
     await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", outcome: "DENIED", applicationId: appId });
-    throw forbidden();
+    throw forbidden("Full BVN and TIN are shown only to the initiator, the officer holding the request and the credit decision-makers.");
   }
   const app = (await db.query("SELECT current_version_id FROM applications WHERE id = $1", [appId])).rows[0];
   const v = app?.current_version_id ? (await db.query("SELECT bvn_enc, tin_enc FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0] : null;

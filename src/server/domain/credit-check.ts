@@ -277,8 +277,9 @@ export async function canSeeCreditDetail(q: Db, staffId: string, appId: string):
   const init = await q.query("SELECT 1 FROM applications a WHERE a.id = $1 AND a.initiator_id = $2", [appId, staffId]);
   if (init.rowCount && (await holdsRole(q, staffId, (await q.query("SELECT initiator_role FROM applications WHERE id = $1", [appId])).rows[0].initiator_role))) return true;
   const r = await q.query(
-    `SELECT 1 FROM tasks WHERE application_id = $1 AND assignee_id = $2
-       AND assignee_role IN ('PRODUCT_MANAGER','CREDIT_OFFICER_1','CREDIT_OFFICER_2','CREDIT_OFFICER_3','CREDIT_LEAD_1','CREDIT_LEAD_2','UNIT_HEAD','DIVISIONAL_HEAD') LIMIT 1`,
+    `SELECT 1 FROM tasks t JOIN role_assignments ra ON ra.staff_id = t.assignee_id AND ra.role = t.assignee_role AND ra.active
+      WHERE t.application_id = $1 AND t.assignee_id = $2
+       AND t.assignee_role IN ('PRODUCT_MANAGER','CREDIT_OFFICER_1','CREDIT_OFFICER_2','CREDIT_OFFICER_3','CREDIT_LEAD_1','CREDIT_LEAD_2','UNIT_HEAD','DIVISIONAL_HEAD') LIMIT 1`,
     [appId, staffId],
   );
   return (r.rowCount ?? 0) > 0;

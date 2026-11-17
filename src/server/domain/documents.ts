@@ -47,7 +47,8 @@ export const DOC_CATEGORIES: DocCategory[] = [
   { code: "FACILITY_ARCHIVE", label: "Facility archive (ZIP)", multiple: false },
 ];
 /** Categories that contain detailed credit information. */
-export const RESTRICTED_CREDIT_CATEGORIES = ["SEEDFI_CREDIT_REPORT", "FACILITY_ARCHIVE"];
+// Credit data is need-to-know (security review M8): bureau reports and DSR exception evidence too.
+export const RESTRICTED_CREDIT_CATEGORIES = ["SEEDFI_CREDIT_REPORT", "CREDIT_REPORT", "DSR_EXCEPTION_EVIDENCE", "FACILITY_ARCHIVE"];
 export const CATEGORY_LABEL = Object.fromEntries(DOC_CATEGORIES.map((c) => [c.code, c.label])) as Record<string, string>;
 
 const INITIAL = ["BANK_STATEMENT", "CAC_CERTIFICATE", "SUPPLIER_INVOICE", "APPLICATION_FORM", "CONSENT_FORM", "RENT_RECEIPT", "SUPPORTING"];
@@ -63,7 +64,8 @@ export const UPLOADABLE_BY_STAGE: Partial<Record<Stage, string[]>> = {
   CREDIT_CORRECTION: ["CREDIT_REPORT", "DSR_EXCEPTION_EVIDENCE", "SUPPORTING"],
   OFFER_PREPARATION: [...PACK, "SUPPORTING"],
   CO3_PACK_REVIEW: ["INSURANCE_EVIDENCE", "SUPPORTING"],
-  DISBURSEMENT_CORRECTION: ["INSURANCE_EVIDENCE", ...PACK, "SUPPORTING"],
+  // Customer-signed documents are filed only by the initiator: CO3 returns the pack to them (security review M7).
+  DISBURSEMENT_CORRECTION: ["INSURANCE_EVIDENCE", "SUPPORTING"],
   VENDOR_CONFIRMATION: ["POST_DISBURSEMENT", "SUPPORTING"],
 };
 

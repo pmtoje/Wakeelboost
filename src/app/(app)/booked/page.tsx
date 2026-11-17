@@ -1,3 +1,4 @@
+import { reportScope } from "@/server/reports";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "../../_lib/auth";
@@ -19,7 +20,10 @@ export default async function Booked({ searchParams }: { searchParams: Promise<R
   const isInitiator = INITIATOR_ROLES.some((r) => roles.includes(r));
   if (!isReporter && !isInitiator) redirect("/forbidden");
   const showAll = isReporter && !INITIATOR_ROLES.includes(session.activeRole as never);
-  const all = await bookedRequests(db, { initiatorId: showAll ? null : session.staffId });
+  // A region-scoped Reporting Admin sees only their regions (security review M5), as in reports.
+  const scope = showAll ? await reportScope(db, session.staffId) : null;
+  if (showAll && !scope) redirect("/forbidden");
+  const all = await bookedRequests(db, { initiatorId: showAll ? null : session.staffId, regions: scope?.regions ?? null });
   const q = (sp.q ?? "").toLowerCase().trim();
   const rows = all.filter(
     (r) =>

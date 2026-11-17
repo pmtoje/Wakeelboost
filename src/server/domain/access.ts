@@ -27,9 +27,10 @@ export async function holdsRole(q: Db, staffId: string, role: string): Promise<b
 /**
  * Case-scoped access. A staff member may view a case (summary, history, every retained document)
  * when they are:
- *   - the initiator;
- *   - any officer who has ever been assigned a task on the case (endorsers, reviewers, approvers,
- *     disbursement officers) - handoffs never remove historical access;
+ *   - the initiator, while they still hold the initiator role they used;
+ *   - any officer who has been assigned a task on the case (endorsers, reviewers, approvers,
+ *     disbursement officers), while they still hold the role of that task - handoffs keep access,
+ *     but removing the role removes it (security review M6);
  *   - a member of an approved Legal / Shariah Compliance closure group whose group received the
  *     case's closure pack (requires the LEGAL_REVIEWER / SHARIAH_REVIEWER role).
  * Admin status alone does not grant case or document access.
@@ -37,8 +38,10 @@ export async function holdsRole(q: Db, staffId: string, role: string): Promise<b
 export async function caseAccess(q: Db, staffId: string, appId: string): Promise<CaseAccess> {
   const r = await q.query<{ initiator: boolean; assigned: boolean; legal: boolean; shariah: boolean }>(
     `SELECT
-       EXISTS (SELECT 1 FROM applications a WHERE a.id = $2 AND a.initiator_id = $1) AS initiator,
-       EXISTS (SELECT 1 FROM tasks t WHERE t.application_id = $2 AND t.assignee_id = $1) AS assigned,
+       EXISTS (SELECT 1 FROM applications a JOIN role_assignments ra ON ra.staff_id = a.initiator_id AND ra.role = a.initiator_role AND ra.active
+                WHERE a.id = $2 AND a.initiator_id = $1) AS initiator,
+       EXISTS (SELECT 1 FROM tasks t JOIN role_assignments ra ON ra.staff_id = t.assignee_id AND ra.role = t.assignee_role AND ra.active
+                WHERE t.application_id = $2 AND t.assignee_id = $1) AS assigned,
        EXISTS (SELECT 1 FROM closure_events c JOIN role_assignments ra ON ra.staff_id = $1 AND ra.active AND ra.role = 'LEGAL_REVIEWER'
                 JOIN staff s ON s.id = $1 AND s.status = 'ACTIVE'
                 JOIN recipient_group_members m ON m.group_code = 'LEGAL' AND m.email = s.email

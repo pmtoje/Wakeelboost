@@ -148,7 +148,7 @@ export function allowedActions(stage: Stage, route: number | null): TaskAction[]
     case "DISBURSEMENT_CHECK":
       return ["OKAY", "SEND_FOR_CORRECTION"];
     case "DISBURSEMENT_CORRECTION":
-      return ["RESUBMIT"];
+      return ["RESUBMIT", "RETURN"];
     case "DISBURSEMENT_BOOKING":
       return ["DISBURSED"];
     case "COMPLETION":

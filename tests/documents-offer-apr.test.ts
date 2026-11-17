@@ -31,17 +31,19 @@ describe("shared case documents", () => {
     const docs = await listDocuments(db, id);
     const statement = docs.find((d) => d.category === "BANK_STATEMENT")!;
     const report = docs.find((d) => d.category === "CREDIT_REPORT")!;
-    // initiator, endorser (handoff completed) and first reviewer can all read every document
+    // initiator, endorser (handoff completed) and first reviewer can all read the case documents
     for (const email of ["rm.ade@altbank.ng", "rbe.lagos@altbank.ng", "co1@altbank.ng"]) {
       const ctx = await ctxFor(email);
-      expect((await readDocumentForActor(ctx, report.id, "download")).data.subarray(0, 5).toString()).toBe("%PDF-");
       expect((await readDocumentForActor(ctx, statement.id, "view")).doc.id).toBe(statement.id);
     }
+    // ...but the bureau credit report is need-to-know: initiator and credit officers only, not the endorser
+    for (const email of ["rm.ade@altbank.ng", "co1@altbank.ng"]) expect((await readDocumentForActor(await ctxFor(email), report.id, "download")).data.subarray(0, 5).toString()).toBe("%PDF-");
+    await expect(readDocumentForActor(await ctxFor("rbe.lagos@altbank.ng"), report.id, "download")).rejects.toThrow(/credit information/);
     // An officer never assigned to the case cannot - not even the Super Admin.
     for (const email of ["do1@altbank.ng", "superadmin@altbank.ng", "rbe.abuja@altbank.ng"]) {
       await expect(readDocumentForActor(await ctxFor(email), report.id, "download")).rejects.toThrow(/do not have access/);
     }
-    expect((await audits("DOCUMENT_DOWNLOAD")).filter((a) => a.outcome === "DENIED")).toHaveLength(3);
+    expect((await audits("DOCUMENT_DOWNLOAD")).filter((a) => a.outcome === "DENIED")).toHaveLength(4); // 3 outsiders + the endorser on the credit report
     expect((await audits("DOCUMENT_VIEW")).filter((a) => a.outcome === "SUCCESS").length).toBeGreaterThanOrEqual(3);
   });
 

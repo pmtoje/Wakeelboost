@@ -1,3 +1,4 @@
+import { config } from "@/server/config";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { baseCtx } from "../../../_lib/auth";
@@ -17,6 +18,10 @@ export async function POST(req: NextRequest) {
   const r = await lookupSession((await cookies()).get(SESSION_COOKIE)?.value, ctx, { touch: true });
   if (r.status !== "ok") return NextResponse.json({ ok: false, error: "Your session has ended. Sign in again.", expired: true }, { status: 401 });
   ctx.actor = { staffId: r.session.staffId, email: r.session.email, name: r.session.fullName, sessionId: r.session.sessionId, activeRole: r.session.activeRole };
+  // Refuse oversized bodies before reading them into memory (security review M3).
+  const len = Number(req.headers.get("content-length") ?? NaN);
+  if (!Number.isFinite(len)) return NextResponse.json({ ok: false, error: "Upload length required." }, { status: 411 });
+  if (len > config.maxUploadBytes + 1024 * 1024) return NextResponse.json({ ok: false, error: `The file exceeds the ${Math.round(config.maxUploadBytes / 1048576)} MB limit.` }, { status: 413 });
   let fd: FormData;
   try {
     fd = await req.formData();

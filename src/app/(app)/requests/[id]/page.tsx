@@ -1070,7 +1070,7 @@ async function ActionPanel({ c, task, data, doneHref }: { c: Case; task: NonNull
     ["RESPOND_CLARIFICATION", "Send clarification", false],
     ["REQUEST_CLARIFICATION", "Request clarification", false],
     ["DECLINE", "Decline", true],
-    ["RETURN", stage === "CO3_PACK_REVIEW" ? "Return pack to initiator" : "Return for correction", false],
+    ["RETURN", stage === "CO3_PACK_REVIEW" || stage === "DISBURSEMENT_CORRECTION" ? "Return pack to initiator" : "Return for correction", false],
     ["REQUEST_INITIATOR", "Request documents from initiator", false],
     ["SEND_FOR_CORRECTION", "Send for Correction", false],
     ["REJECT", "Reject", true],

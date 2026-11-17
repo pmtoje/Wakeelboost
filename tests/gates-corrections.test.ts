@@ -94,8 +94,16 @@ describe("offer pack, CO3 and CRMS gates", () => {
     let t = await openTaskOf(id);
     expect(t.stage).toBe("DISBURSEMENT_CORRECTION");
     expect(t.email).toBe("co3@altbank.ng");
-    await uploadDocument(co3, { applicationId: id, category: "GSI_FORM", filename: "gsi-v2.pdf", data: makePdf("gsi v2") });
-    await act(id, "RESUBMIT");
+    // CO3 cannot replace a customer-signed form (segregation of duties): the pack goes back to the initiator.
+    await expect(uploadDocument(co3, { applicationId: id, category: "GSI_FORM", filename: "gsi-v2.pdf", data: makePdf("gsi v2") })).rejects.toThrow(/cannot upload this document type/);
+    await expect(act(id, "RETURN")).rejects.toThrow(/reason is required/);
+    await act(id, "RETURN", { reason: "GSI form unsigned: customer to sign" });
+    t = await openTaskOf(id);
+    expect(t.stage).toBe("OFFER_PREPARATION");
+    await uploadDocument(await ctxFor(t.email!), { applicationId: id, category: "GSI_FORM", filename: "gsi-v2.pdf", data: makePdf("gsi v2") });
+    await act(id, "SUBMIT_PACK");
+    expect((await openTaskOf(id)).stage).toBe("CO3_PACK_REVIEW");
+    await act(id, "FORWARD");
     t = await openTaskOf(id);
     expect(t.stage).toBe("DISBURSEMENT_CHECK");
     expect(t.email).toBe("do1@altbank.ng");

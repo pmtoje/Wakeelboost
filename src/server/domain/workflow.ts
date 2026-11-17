@@ -797,6 +797,19 @@ async function dispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRow, input: Tas
       return "Documents checked. Sent to Disbursement Officer 2.";
     }
     case "DISBURSEMENT_CORRECTION": {
+      if (a === "RETURN") {
+        // A customer-signed document needs replacing: only the initiator files those (security review M7).
+        if (app.active_correction_id) {
+          await resolveCorrection(tx, ctx, app.active_correction_id, "RETURNED_TO_INITIATOR");
+          app.active_correction_id = null;
+        }
+        await createCorrection(tx, ctx, app, task, "OFFER_PREPARATION", reason!, null);
+        await recordDecision(tx, ctx, app, task, a, reason);
+        await completeTask(tx, ctx, task, a);
+        const chosen = await chooseAssignee(tx, app, "OFFER_PREPARATION");
+        await moveTo(tx, ctx, app, "OFFER_PREPARATION", chosen, reason ?? undefined);
+        return "Pack returned to the initiator to replace the customer-signed documents.";
+      }
       if (app.active_correction_id) {
         await resolveCorrection(tx, ctx, app.active_correction_id, "RESUBMITTED");
         app.active_correction_id = null;
