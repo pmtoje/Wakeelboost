@@ -8,7 +8,7 @@ import { config } from "../config";
 import { objectStore } from "../storage";
 import { scanDocument } from "../domain/documents";
 import { processOutbox } from "./outbox";
-import { runMonthlyReport, runWeeklyDigest } from "./schedules";
+import { runMonthlyReport, runSaleCompletionReminders, runWeeklyDigest } from "./schedules";
 
 /** Retry scans for files left in quarantine (e.g. scanner unavailable at upload time). */
 export async function rescanQuarantined(now = new Date()) {
@@ -40,6 +40,7 @@ export async function workerTick(now = new Date()) {
   results.saleContracts = await processDueSaleContracts(now);
   results.archives = await processDueArchives(now);
   results.outbox = await processOutbox(now);
+  results.saleReminders = await runSaleCompletionReminders(now);
   results.weekly = await runWeeklyDigest(now);
   results.monthly = await runMonthlyReport(now);
   await rescanQuarantined(now);

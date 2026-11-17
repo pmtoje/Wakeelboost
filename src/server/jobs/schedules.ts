@@ -95,13 +95,21 @@ export async function runWeeklyDigest(now = new Date()): Promise<{ ran: boolean;
           [ini.id, period.startDate, period.endDate],
         )
       ).rows;
-      const summary = { disbursements: disb.length, repaymentsDue: due.length, periodStart: period.startDate, periodEnd: period.endDate };
+      const awaitingSale = (
+        await tx.query(
+          `SELECT a.id, a.ref, a.customer_name, coalesce(t.assigned_at, t.entered_at) AS since
+             FROM tasks t JOIN applications a ON a.id = t.application_id
+            WHERE t.status = 'OPEN' AND t.stage = 'VENDOR_CONFIRMATION' AND t.assignee_id = $1 ORDER BY since`,
+          [ini.id],
+        )
+      ).rows;
+      const summary = { disbursements: disb.length, repaymentsDue: due.length, awaitingSaleCompletion: awaitingSale.length, periodStart: period.startDate, periodEnd: period.endDate };
       const del = await tx.query<{ id: string }>(
         `INSERT INTO digest_deliveries (run_id, code, period_key, recipient_id, summary, created_at) VALUES ($1,'WEEKLY_DIGEST',$2,$3,$4,$5)
          ON CONFLICT (code, period_key, recipient_id) DO NOTHING RETURNING id`,
         [run.id, period.key, ini.id, JSON.stringify(summary), now],
       );
-      if (!del.rowCount || (!disb.length && !due.length)) continue;
+      if (!del.rowCount || (!disb.length && !due.length && !awaitingSale.length)) continue;
       const lines = [
         `Hello ${ini.full_name},`,
         "",
@@ -112,6 +120,9 @@ export async function runWeeklyDigest(now = new Date()): Promise<{ ran: boolean;
         "",
         `Repayments due this week (Monday–Sunday): ${due.length}`,
         ...due.map((r) => `  - ${r.due_date} ${r.ref} ${r.customer_name} instalment ${r.seq}: ${formatKobo(Number(r.amount_kobo))} ${caseLink(r.id)}`),
+        ...(awaitingSale.length
+          ? ["", `Waiting for you to confirm sale completion: ${awaitingSale.length}`, ...awaitingSale.map((r) => `  - ${r.ref} ${r.customer_name}: waiting since ${lagosDate(new Date(r.since))} ${caseLink(r.id)}`)]
+          : []),
       ];
       const out = await enqueueEmail(tx, now, {
         kind: "WEEKLY_DIGEST",
@@ -236,4 +247,64 @@ export async function runMonthlyReport(now = new Date()): Promise<{ ran: boolean
     await audit(tx, ctx, { action: "MONTHLY_REPORT_RUN", details: { period: period.key, recipients: recipients.length, sent } });
     return { ran: true, sent, period: period.key };
   });
+}
+
+// ------------------------------------------------------------------ sale completion reminders
+
+/** Remind the initiator after this long at sale completion, and again at the same interval until closed. */
+export const SALE_REMINDER_EVERY_MS = 2 * 86400_000;
+
+/**
+ * Worker: email initiators whose requests have waited at sale completion (VENDOR_CONFIRMATION) for two
+ * days or more, then every two days until they confirm. Sent only during working hours (08:00–18:00
+ * Lagos); each two-day window sends at most once (outbox dedupe), so restarts and several workers are safe.
+ */
+export async function runSaleCompletionReminders(now = new Date()): Promise<number> {
+  const hour = lagosParts(now).hour;
+  if (hour < 8 || hour >= 18) return 0;
+  const waiting = (
+    await db.query(
+      `SELECT t.id AS task_id, t.assigned_at, t.entered_at, a.id, a.ref, a.customer_name, s.email, s.full_name,
+              EXISTS (SELECT 1 FROM documents d WHERE d.application_id = a.id AND d.category = 'POST_DISBURSEMENT' AND d.superseded_at IS NULL AND d.scan_status = 'CLEAN') AS sale_signed,
+              EXISTS (SELECT 1 FROM offer_templates o WHERE o.status = 'ACTIVE' AND o.doc_type = 'POST_DISBURSEMENT' AND (o.applicant_type = a.applicant_type OR o.applicant_type IS NULL)) AS sale_needed
+         FROM tasks t JOIN applications a ON a.id = t.application_id JOIN staff s ON s.id = t.assignee_id
+        WHERE t.status = 'OPEN' AND t.stage = 'VENDOR_CONFIRMATION' AND s.status = 'ACTIVE'
+          AND coalesce(t.assigned_at, t.entered_at) <= $1`,
+      [new Date(now.getTime() - SALE_REMINDER_EVERY_MS)],
+    )
+  ).rows;
+  let sent = 0;
+  for (const w of waiting) {
+    const since = new Date(w.assigned_at ?? w.entered_at);
+    const days = Math.floor((now.getTime() - since.getTime()) / 86400_000);
+    const window = Math.floor((now.getTime() - since.getTime()) / SALE_REMINDER_EVERY_MS);
+    const next =
+      w.sale_needed && !w.sale_signed
+        ? "have the customer sign the Murabaha sale contract (on the tablet, or upload the signed copy), then press Confirm sale completed"
+        : "press Confirm sale completed";
+    const created = await withTx(async (tx) => {
+      const out = await enqueueEmail(tx, now, {
+        kind: "SALE_COMPLETION_REMINDER",
+        dedupeKey: `sale-completion:${w.task_id}:${window}`,
+        applicationId: w.id,
+        to: [w.email],
+        subject: `Reminder: confirm sale completion for WakeelBoost ${w.ref}`,
+        text: simpleEmail([
+          `Hello ${w.full_name},`,
+          "",
+          `Request ${w.ref} (${w.customer_name}) has been waiting for you to confirm the sale is completed for ${days} day${days === 1 ? "" : "s"}.`,
+          "Credit Officer 3 has already sent the pack. The request stays open, and repayment prompts do not start, until you confirm.",
+          "",
+          `Next step: ${next}.`,
+          "",
+          caseLink(w.id),
+        ]),
+      });
+      if (!out.created) return false;
+      await audit(tx, systemCtx(now), { action: "SALE_COMPLETION_REMINDER_SENT", applicationId: w.id, stage: "VENDOR_CONFIRMATION", details: { taskId: w.task_id, daysWaiting: days, saleContractSigned: w.sale_signed, outboxId: out.id } });
+      return true;
+    });
+    if (created) sent++;
+  }
+  return sent;
 }

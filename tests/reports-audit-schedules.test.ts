@@ -5,8 +5,8 @@ import { NAIRA } from "@/server/money";
 import { exportReport, reportFilterSchema, reportScope, runReport } from "@/server/reports";
 import { grantRole, updateMonthlySchedule } from "@/server/domain/admin";
 import { sendReminder } from "@/server/domain/workflow";
-import { currentMonthlyPeriod, currentWeeklyPeriod, runMonthlyReport, runWeeklyDigest } from "@/server/jobs/schedules";
-import { act, createSubmittedCase, ctxFor, driveToOffer, openTaskOf, uploadSignedSaleContract } from "@/server/demo/scenario";
+import { currentMonthlyPeriod, currentWeeklyPeriod, runMonthlyReport, runSaleCompletionReminders, runWeeklyDigest } from "@/server/jobs/schedules";
+import { act, createSubmittedCase, ctxFor, driveToOffer, driveToSaleCompletion, openTaskOf, uploadSignedSaleContract } from "@/server/demo/scenario";
 import { addDaysToDateString, fromLagos, lagosDate } from "@/server/time";
 import { audits, key, outbox, resetDb, staffId } from "./helpers";
 
@@ -218,3 +218,53 @@ describe("scheduled emails", () => {
     expect(addDaysToDateString("2026-08-03", 0)).toBe("2026-08-03");
   });
 });
+
+describe("sale completion reminders", () => {
+  // 10:00 Lagos on a weekday, so reminders fall in working hours
+  const at = (base: Date, hours: number) => new Date(base.getTime() + hours * 3600_000);
+  async function waitingCase() {
+    const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000_000) });
+    await driveToOffer(id);
+    await driveToSaleCompletion(id);
+    const start = new Date("2026-06-09T09:00:00Z"); // Tuesday 10:00 Lagos
+    await db.query("UPDATE tasks SET assigned_at = $2, entered_at = $2 WHERE application_id = $1 AND status = 'OPEN'", [id, start]);
+    return { id, start };
+  }
+
+  it("emails the initiator after two days at sale completion, then every two days, only in working hours", async () => {
+    const { id, start } = await waitingCase();
+    expect(await runSaleCompletionReminders(at(start, 47))).toBe(0); // not yet two days
+    expect(await runSaleCompletionReminders(at(start, 48))).toBe(1);
+    expect(await runSaleCompletionReminders(at(start, 50))).toBe(0); // same two-day window
+    const mail = (await outbox("SALE_COMPLETION_REMINDER"))[0];
+    expect(mail.to_addresses).toEqual(["rm.ade@altbank.ng"]);
+    expect(mail.body_text).toMatch(/waiting for you to confirm the sale is completed for 2 days/);
+    expect(mail.body_text).toMatch(/sign the Murabaha sale contract/);
+    expect(await runSaleCompletionReminders(at(start, 96 + 12))).toBe(0); // 22:00 Lagos: no email at night
+    expect(await runSaleCompletionReminders(at(start, 96 + 1))).toBe(1); // day 4, 11:00 Lagos
+    expect((await audits("SALE_COMPLETION_REMINDER_SENT")).length).toBe(2);
+    // Once the sale is confirmed completed, reminders stop.
+    await uploadSignedSaleContract(id);
+    await act(id, "CONFIRM_VENDOR_PAYMENT");
+    expect(await runSaleCompletionReminders(at(start, 144))).toBe(0);
+  });
+
+  it("drops the sale contract step from the reminder once it is signed", async () => {
+    const { id, start } = await waitingCase();
+    await uploadSignedSaleContract(id);
+    await runSaleCompletionReminders(at(start, 49));
+    const mail = (await outbox("SALE_COMPLETION_REMINDER"))[0];
+    expect(mail.body_text).toMatch(/Next step: press Confirm sale completed\./);
+  });
+
+  it("lists requests waiting for sale completion in the initiator's weekly summary", async () => {
+    const { id } = await waitingCase();
+    const monday = new Date("2026-06-14T23:00:00Z"); // Monday 00:00 Lagos
+    await runWeeklyDigest(new Date(monday.getTime() + 60_000));
+    const mail = (await outbox("WEEKLY_DIGEST")).find((m) => m.to_addresses.includes("rm.ade@altbank.ng"))!;
+    const ref = (await db.query("SELECT ref FROM applications WHERE id = $1", [id])).rows[0].ref;
+    expect(mail.body_text).toMatch(/Waiting for you to confirm sale completion: 1/);
+    expect(mail.body_text).toContain(ref);
+  });
+});
+

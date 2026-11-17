@@ -217,6 +217,12 @@ export async function preparePack(appId: string, now = new Date()) {
 }
 
 export async function driveToClosed(appId: string, now = new Date(), txRef = `TRX${Date.now()}${Math.floor(Math.random() * 1000)}`) {
+  await driveToSaleCompletion(appId, now, txRef);
+  await uploadSignedSaleContract(appId, now);
+  await act(appId, "CONFIRM_VENDOR_PAYMENT", {}, now);
+}
+/** Everything up to the initiator's sale completion step (pack sent by Credit Officer 3). */
+export async function driveToSaleCompletion(appId: string, now = new Date(), txRef = `TRX${Date.now()}${Math.floor(Math.random() * 1000)}`) {
   await preparePack(appId, now);
   await act(appId, "SUBMIT_PACK", {}, now);
   const t = await openTaskOf(appId);
@@ -238,8 +244,6 @@ export async function driveToClosed(appId: string, now = new Date(), txRef = `TR
     },
   }, now);
   await act(appId, "COMPLETE_PROCESS", {}, now);
-  await uploadSignedSaleContract(appId, now);
-  await act(appId, "CONFIRM_VENDOR_PAYMENT", {}, now);
 }
 /** Initiator at sale completion: file the customer-signed Murabaha sale contract. */
 export async function uploadSignedSaleContract(appId: string, now = new Date()) {
