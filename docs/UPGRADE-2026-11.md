@@ -63,14 +63,14 @@ not received.
 
 ## Before production
 
-1. **SeedFi (live, automatic)**: in the secret store set `SEEDFI_BASE_URL=https://loanengine.theseedfi.com`
-   and the Altmall SeedFi account sign-in, `SEEDFI_USERNAME` and `SEEDFI_PASSWORD`. The app signs in
-   (`/auth/api/v1/login`), caches the 30-minute access token, renews it with the refresh token before it
-   expires and signs in again if SeedFi rejects it; nobody creates, copies or emails keys.
-   (`SEEDFI_API_KEY` remains a supported alternative.) Production refuses SeedFi staging. WakeelBoost uses
-   the **Altmall** integration (SeedFi API documentation v2.0, prepared for Altmall); SeedFi's go-live
-   sign-off for Altmall must be in place. The live connection has **not** been verified in this build
-   (no live credentials were available); all tests use a stand-in that answers in SeedFi's documented format.
+1. **SeedFi (live)**: WakeelBoost uses the same Alt Mall SeedFi production key as ARAF
+   (`AltMall_ARAF_prod_Nov2026`, Alt Mall account paul.toje@altbank.ng; same team). In WakeelBoost's
+   deployment settings set `SEEDFI_BASE_URL=https://loanengine.theseedfi.com` and `SEEDFI_API_KEY` to
+   the value of that key, copied from ARAF's deployment settings. Do not set `SEEDFI_USERNAME` /
+   `SEEDFI_PASSWORD` (account sign-in remains available as an alternative). If the servers reach the
+   internet through an HTTP proxy, start Node with `NODE_USE_ENV_PROXY=1`. Production refuses SeedFi
+   staging. The live connection has not been verified from this build environment (the key is held
+   only in ARAF's deployment); the first real credit check, with a consenting customer, is the live test.
 2. **Credit rules**: enter the bank's approved rules.
 3. **Product Manager**: grant the role (Users & roles) to the responsible staff.
 4. **Offer templates**: Super Admin → Offer templates → Preview sample → Approve each of the three
