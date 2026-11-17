@@ -107,6 +107,17 @@ class S3Store implements ObjectStore {
   }
 }
 
+/** A store for a given driver (the storage migration reads one and writes another). */
+export function createStore(driver: "local" | "s3" | "sharepoint", opts: { allowLocalInProduction?: boolean } = {}): ObjectStore {
+  if (driver === "sharepoint") return new SharePointStore();
+  if (driver === "s3") {
+    if (!config.s3.bucket) throw new Error("S3_BUCKET is required for STORAGE_DRIVER=s3");
+    return new S3Store();
+  }
+  if (!opts.allowLocalInProduction) assertNotProduction("Local encrypted file storage");
+  return new LocalEncryptedStore(path.resolve(config.storageLocalDir));
+}
+
 let store: ObjectStore | null = null;
 export function objectStore(): ObjectStore {
   if (!store) {

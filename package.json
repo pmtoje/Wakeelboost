@@ -21,7 +21,8 @@
     "mail:test": "tsx scripts/send-test-email.ts",
     "directory:import": "tsx scripts/import-directory.ts",
     "setup": "tsx scripts/setup.ts",
-    "security:reencrypt": "tsx scripts/reencrypt.ts"
+    "security:reencrypt": "tsx scripts/reencrypt.ts",
+    "storage:copy-to-sharepoint": "tsx scripts/copy-to-sharepoint.ts"
   },
   "engines": {
     "node": ">=20.11"

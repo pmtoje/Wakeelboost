@@ -75,3 +75,27 @@ names. Every version of a document is kept as its own file.
   (HTTP 429/503) is retried, honouring `Retry-After`.
 - A file moves out of `quarantine/` only after the malware scan passes; rejected uploads are deleted.
 - Every view and download still goes through WakeelBoost's own access checks and is audited.
+
+## Moving existing documents to SharePoint
+
+`npm run storage:copy-to-sharepoint` copies every stored document and template from the current store
+(S3 or local files) into the library under the readable paths above. Set `SOURCE_STORAGE_DRIVER`
+(`s3` or `local`) with that store's usual settings, plus the `SHAREPOINT_*` settings.
+
+1. **Check:** `SOURCE_STORAGE_DRIVER=s3 npm run storage:copy-to-sharepoint -- --dry-run` lists how
+   many documents and templates would be copied, their size, and example paths. Nothing is written.
+2. **Copy while the app runs:** run it without flags. Each file is read from the source, checked
+   against the SHA-256 recorded when it was stored, written to SharePoint, read back and checked again,
+   then logged (`storage_migrations`). The app keeps using the source, so nothing breaks. A file whose
+   checksum does not match is reported and not copied. The run can be stopped and repeated: files
+   already copied are skipped. Use `--concurrency=8` to go faster (default 4, maximum 16).
+3. **Switch with the app stopped:** stop the web app and the worker, then run with `--switch`. It copies
+   anything added since step 2, refuses to switch if any file failed, then points every document and
+   template at its SharePoint copy in one transaction.
+4. **Start on SharePoint:** set `STORAGE_DRIVER=sharepoint` and start the app and worker. Open a few
+   documents from different requests to confirm.
+5. **Keep the source** as a backup until you are satisfied; the script never modifies or deletes it.
+   If something is wrong, stop the app, run with `--rollback`, and start the app with the old
+   `STORAGE_DRIVER` again.
+
+Each run is audited (`STORAGE_COPIED`, `STORAGE_SWITCHED`, `STORAGE_ROLLBACK`).
