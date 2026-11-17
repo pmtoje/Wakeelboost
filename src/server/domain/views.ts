@@ -194,11 +194,12 @@ export async function getCase(ctx: Ctx, appId: string) {
   ).rows;
   const openTask = tasks.find((t: { status: string }) => t.status === "OPEN") ?? null;
   const creditCheck = app.credit_check_status === "NOT_REQUIRED" ? null : await latestCreditCheck(db, appId);
-  const creditDetail = creditCheck ? await canSeeCreditDetail(db, actor.staffId, appId) : false;
+  const creditDetail = await canSeeCreditDetail(db, actor.staffId, appId);
   await auditOutsideTx(ctx, { action: "CASE_VIEW", applicationId: appId, stage: app.stage, details: { capacities: access.capacities } });
   return {
     app,
     archive: await archiveFor(db, appId),
+    creditDetailAllowed: creditDetail,
     credit: creditCheck ? { check: creditCheck, detail: creditDetail, narration: creditDetail ? creditResponseDetail(creditCheck).narration : null } : null,
     access,
     version,

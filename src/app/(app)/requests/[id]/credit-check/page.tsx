@@ -31,6 +31,7 @@ export default async function CreditCheckPage({ params }: { params: Promise<{ id
   const history = await creditCheckHistory(db, id);
   const latest = history[0] ?? null;
   const detail = await canSeeCreditDetail(db, session.staffId, id);
+  const report = c.documents.find((d) => d.category === "SEEDFI_CREDIT_REPORT" && !d.superseded_at);
   const canRun = app.stage === "DRAFT" && (status === "REQUIRED" || status === "UNAVAILABLE");
   const typeLabel = APPLICANT_TYPE_LABELS[app.applicant_type as keyof typeof APPLICANT_TYPE_LABELS];
   return (
@@ -91,6 +92,11 @@ export default async function CreditCheckPage({ params }: { params: Promise<{ id
         <div className="card">
           <h2>{latest.status === "FAILED" ? "Last enquiry" : "Credit check result"}</h2>
           <CreditCheckResult check={latest} detail={detail} narration={detail ? creditResponseDetail(latest).narration : null} />
+          {report && detail && (
+            <p className="small" style={{ margin: "12px 0 0" }}>
+              <Link href={`/requests/${id}?tab=documents&doc=${report.id}`}>View the SeedFi credit check report (PDF)</Link> · generated automatically and filed with the facility
+            </p>
+          )}
           {history.length > 1 && <p className="small muted" style={{ marginTop: 12 }}>{history.length} enquiries recorded for this request; earlier ones are kept in the audit trail.</p>}
         </div>
       )}

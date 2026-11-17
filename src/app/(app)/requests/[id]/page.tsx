@@ -5,7 +5,7 @@ import { requireUser } from "../../../_lib/auth";
 import { db } from "@/server/db";
 import { DomainError } from "@/server/errors";
 import { getCase } from "@/server/domain/views";
-import { signDocumentLink, CATEGORY_LABEL, DOC_CATEGORIES, UPLOADABLE_BY_STAGE, PACK, type DocumentRow } from "@/server/domain/documents";
+import { signDocumentLink, RESTRICTED_CREDIT_CATEGORIES, CATEGORY_LABEL, DOC_CATEGORIES, UPLOADABLE_BY_STAGE, PACK, type DocumentRow } from "@/server/domain/documents";
 import { STAGE_LABELS, ACTION_LABELS, allowedActions, type Stage, type TaskAction } from "@/server/domain/stages";
 import { ROLE_LABELS, type Role } from "@/server/domain/roles";
 import { APPLICANT_TYPE_LABELS, assetCostKobo, type DraftData } from "@/server/domain/application-data";
@@ -285,6 +285,14 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
           </div>
           {app.product_manager_id && <p className="small muted" style={{ margin: "6px 0 0" }}>Product Manager: {name(app.product_manager_id)}</p>}
           {c.credit ? <div style={{ marginTop: 12 }}><CreditCheckResult check={c.credit.check} detail={c.credit.detail} narration={c.credit.narration} /></div> : <p className="small muted">No enquiry has been made yet.</p>}
+          {(() => {
+            const rep = c.documents.find((d) => d.category === "SEEDFI_CREDIT_REPORT" && !d.superseded_at);
+            return rep && c.creditDetailAllowed ? (
+              <p className="small" style={{ margin: "10px 0 0" }}>
+                <FileText className="icon" aria-hidden="true" /> <Link href={`/requests/${app.id}?tab=documents&doc=${rep.id}`}>View the SeedFi credit check report (PDF)</Link> · generated automatically {formatLagos(rep.uploaded_at)}
+              </p>
+            ) : null;
+          })()}
         </div>
       )}
       {c.assessment && pricingOf(c.assessment.outputs) && (() => {
@@ -509,7 +517,7 @@ function Documents({ c, link, tabHref, previewId, myTask, isInitiator }: { c: Ca
             {ar.status === "FAILED" && <>{ar.last_error} ({ar.attempts} attempt{ar.attempts === 1 ? "" : "s"}). The facility record is unaffected.</>}
           </p>
           <div className="row" style={{ marginTop: 8 }}>
-            {ar.status === "COMPLETE" && ar.document_id && <a className="btn btn-sm btn-primary" href={link(ar.document_id, "download")}><Download className="icon" aria-hidden="true" /> Download ZIP</a>}
+            {ar.status === "COMPLETE" && ar.document_id && c.creditDetailAllowed && <a className="btn btn-sm btn-primary" href={link(ar.document_id, "download")}><Download className="icon" aria-hidden="true" /> Download ZIP</a>}
             {c.app.status === "CLOSED" && (ar.status === "FAILED" || ar.status === "COMPLETE") && <RetryArchiveButton applicationId={c.app.id} label={ar.status === "FAILED" ? "Retry generation" : "Regenerate"} />}
           </div>
         </div>
@@ -539,7 +547,9 @@ function Documents({ c, link, tabHref, previewId, myTask, isInitiator }: { c: Ca
                   {docStatus(d)}
                 </td>
                 <td className="row-actions">
-                  {d.scan_status === "CLEAN" && !d.purged_at ? (
+                  {RESTRICTED_CREDIT_CATEGORIES.includes(d.category) && !c.creditDetailAllowed ? (
+                    <span className="badge">Restricted: credit information</span>
+                  ) : d.scan_status === "CLEAN" && !d.purged_at ? (
                     <div className="row">
                       {d.mime_type !== "application/zip" && <Link className="btn btn-sm" href={tabHref("documents", { doc: d.id })} aria-label={`Preview ${d.filename} version ${d.version_no}`}><Eye {...ic} />Preview</Link>}
                       <a className="btn btn-sm" href={link(d.id, "download")} aria-label={`Download ${d.filename} version ${d.version_no}`}><Download {...ic} />Download</a>

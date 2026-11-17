@@ -55,12 +55,13 @@ export const ARCHIVE_SECTIONS: { folder: string; categories: string[] }[] = [
   { folder: "01-Financing-application", categories: ["APPLICATION_FORM", "CONSENT_FORM"] },
   { folder: "02-KYC", categories: ["KYC"] },
   { folder: "03-Business-documentation", categories: ["CAC_CERTIFICATE", "BANK_STATEMENT", "RENT_RECEIPT"] },
-  { folder: "04-Supplier-invoice", categories: ["SUPPLIER_INVOICE"] },
-  { folder: "05-Credit-assessment", categories: ["CREDIT_REPORT", "DSR_EXCEPTION_EVIDENCE"] },
-  { folder: "06-Murabaha-offer-letter", categories: ["GENERATED_OFFER", "GENERATED_OFFER_PDF"] },
-  { folder: "07-Signed-offer-letter", categories: ["SIGNED_OFFER"] },
-  { folder: "08-Asset-purchase-and-sale", categories: ["PRE_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED", "INSURANCE_EVIDENCE"] },
-  { folder: "09-Supporting-correspondence", categories: ["SUPPORTING"] },
+  { folder: "04-SeedFi-credit-check", categories: ["SEEDFI_CREDIT_REPORT"] },
+  { folder: "05-Supplier-invoice", categories: ["SUPPLIER_INVOICE"] },
+  { folder: "06-Credit-assessment", categories: ["CREDIT_REPORT", "DSR_EXCEPTION_EVIDENCE"] },
+  { folder: "07-Murabaha-offer-letter", categories: ["GENERATED_OFFER", "GENERATED_OFFER_PDF"] },
+  { folder: "08-Signed-offer-letter", categories: ["SIGNED_OFFER"] },
+  { folder: "09-Asset-purchase-and-sale", categories: ["PRE_DISBURSEMENT", "GSI_FORM", "INSURANCE_SIGNED", "INSURANCE_EVIDENCE"] },
+  { folder: "10-Supporting-correspondence", categories: ["SUPPORTING"] },
 ];
 const RECORD_FOLDER = "00-Facility-record";
 
@@ -229,7 +230,7 @@ export async function buildArchive(q: Db, appId: string) {
   const root = archiveFilename(app.customer_name, app.ref).replace(/\.zip$/, "");
   const manifest: { path: string; sha256: string; category: string; version: number; note?: string }[] = [];
   const used = new Set<string>();
-  const sectionOf = (cat: string) => ARCHIVE_SECTIONS.find((s) => s.categories.includes(cat))?.folder ?? "09-Supporting-correspondence";
+  const sectionOf = (cat: string) => ARCHIVE_SECTIONS.find((s) => s.categories.includes(cat))?.folder ?? "10-Supporting-correspondence";
   for (const d of docs) {
     const folder = `${root}/${sectionOf(d.category)}${d.superseded_at ? "/_previous-versions" : ""}`;
     let entry = `${folder}/${safeEntry(`v${d.version_no}-${d.filename}`)}`;

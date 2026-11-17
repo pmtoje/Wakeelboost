@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { NAIRA } from "@/server/money";
 import { createDraft, saveDraft, submitApplication } from "@/server/domain/workflow";
 import { uploadDocument } from "@/server/domain/documents";
+import { readDocumentForActor } from "@/server/domain/documents";
 import { canSeeCreditDetail, classify, creditSettings, latestCreditCheck, runCreditCheck, updateCreditSettings } from "@/server/domain/credit-check";
 import { act, appRow, ctxFor, makePdf, openTaskOf, sampleData } from "@/server/demo/scenario";
 import { audits, outbox, resetDb, staffId } from "./helpers";
@@ -113,9 +114,10 @@ describe("adverse findings go to the Product Manager", () => {
     expect((await audits("CREDIT_CHECK_REFERRED")).length).toBe(1);
     expect((await outbox()).some((m) => m.to_addresses.includes("pm@altbank.ng"))).toBe(true);
     await expect(saveDraft(rm, id, { data: {} })).rejects.toThrow(/cannot be edited/);
-    // Detailed findings: Product Manager yes, initiator no.
+    // Detailed findings: Product Manager and the initiator yes; staff not on the credit side no.
     expect(await canSeeCreditDetail(db, await staffId("pm@altbank.ng"), id)).toBe(true);
-    expect(await canSeeCreditDetail(db, await staffId("rm.ade@altbank.ng"), id)).toBe(false);
+    expect(await canSeeCreditDetail(db, await staffId("rm.ade@altbank.ng"), id)).toBe(true);
+    expect(await canSeeCreditDetail(db, await staffId("co1@altbank.ng"), id)).toBe(false);
   });
 
   it("every Product Manager decision needs a reason and is recorded with the reviewer", async () => {
@@ -181,6 +183,25 @@ describe("technical failures are never credit decisions", () => {
     expect((await latestCreditCheck(db, id))!.attempt_no).toBe(2);
   }, 20_000);
 
+  it("refuses SeedFi staging in production: live data only", async () => {
+    const { rm, id } = await newDraft();
+    process.env.APP_ENV = "production";
+    try {
+      const { calculateSeedScore } = await import("@/server/integrations/seedfi");
+      const r = await calculateSeedScore({ customerId: "wb-x", firstName: "A", lastName: "B", bvn: "22233344455", dateOfBirth: "1990-01-01", phoneNumber: "08030000000", gender: "male" });
+      expect(r).toMatchObject({ ok: false, code: "NOT_LIVE" });
+      process.env.SEEDFI_BASE_URL = "https://loanengine.theseedfi.com";
+      const live = await calculateSeedScore({ customerId: "wb-x", firstName: "A", lastName: "B", bvn: "22233344455", dateOfBirth: "1990-01-01", phoneNumber: "08030000000", gender: "male" });
+      expect(live.ok).toBe(true);
+      expect(calls.at(-1)!.url).toBe("https://loanengine.theseedfi.com/scoring/api/v1/seed-score/calculate");
+    } finally {
+      process.env.APP_ENV = "test";
+      process.env.SEEDFI_BASE_URL = "https://stg-loan-engine.theseedfi.com";
+    }
+    void id;
+    void rm;
+  });
+
   it("reports SeedFi as unavailable when it is not configured", async () => {
     const { rm, id } = await newDraft();
     const prev = process.env.SEEDFI_API_KEY;
@@ -238,5 +259,40 @@ describe("existing applications", () => {
     await saveDraft(rm, id, { data: {}, bvn: "22212345678" });
     await completeAndSubmit(rm, id);
     expect((await openTaskOf(id)).stage).toBe("BUSINESS_ENDORSEMENT");
+  });
+});
+
+describe("automatic SeedFi credit report", () => {
+  it("is generated from the SeedFi response when the check completes (acceptable or adverse), never for failures", async () => {
+    const { rm, id } = await newDraft();
+    await runCreditCheck(rm, id, ident(BVN_ADVERSE), randomUUID());
+    const docs = (await db.query("SELECT * FROM documents WHERE application_id = $1 AND category = 'SEEDFI_CREDIT_REPORT'", [id])).rows;
+    expect(docs.length).toBe(1);
+    expect(docs[0]).toMatchObject({ generated: true, uploaded_role: "SYSTEM", mime_type: "application/pdf", scan_status: "CLEAN" });
+    expect(docs[0].filename).toMatch(/^SeedFi-credit-report-WB-\d{4}-\d{6}-enquiry-1\.pdf$/);
+    const { data } = await readDocumentForActor(rm, docs[0].id, "download");
+    expect(data.subarray(0, 5).toString()).toBe("%PDF-");
+    const text = data.toString("latin1");
+    expect(text).toContain("SeedFi credit check report");
+    expect(text).toContain("Reviewed Seed Score");
+    expect(text).toContain("444");
+    expect(text).toContain("Adverse findings: referred to the Product Manager");
+    expect(text).not.toContain(BVN_ADVERSE); // BVN masked
+    expect((await audits("CREDIT_REPORT_GENERATED"))[0].details.attempt).toBe(1);
+    const { id: failedId } = await newDraft();
+    await runCreditCheck(rm, failedId, ident(BVN_BADAUTH), randomUUID());
+    expect((await db.query("SELECT count(*)::int n FROM documents WHERE application_id = $1 AND category = 'SEEDFI_CREDIT_REPORT'", [failedId])).rows[0].n).toBe(0);
+  });
+
+  it("is restricted to people allowed to see credit detail and cannot be uploaded or replaced by hand", async () => {
+    const { rm, id } = await newDraft();
+    await runCreditCheck(rm, id, ident(BVN_ADVERSE), randomUUID());
+    const doc = (await db.query("SELECT id FROM documents WHERE application_id = $1 AND category = 'SEEDFI_CREDIT_REPORT'", [id])).rows[0];
+    await readDocumentForActor(await ctxFor("pm@altbank.ng"), doc.id, "view");
+    await act(id, "CLEAR_TO_PROCEED", { reason: "Settled" });
+    await completeAndSubmit(rm, id);
+    // The RBE now has case access but not credit detail.
+    await expect(readDocumentForActor(await ctxFor("rbe.lagos@altbank.ng"), doc.id, "view")).rejects.toThrow(/credit information you are not authorised/);
+    await expect(uploadDocument(rm, { applicationId: id, category: "SEEDFI_CREDIT_REPORT", filename: "x.pdf", data: makePdf("x") })).rejects.toThrow(/produced by the system/);
   });
 });

@@ -107,6 +107,10 @@ function failure(httpStatus: number | null, json: unknown): { code: string; mess
 export async function calculateSeedScore(req: SeedScoreRequest): Promise<SeedfiCall> {
   const s = config.seedfi;
   if (!s.configured) return { ok: false, httpStatus: null, code: "NOT_CONFIGURED", message: "SeedFi is not configured on this server (SEEDFI_BASE_URL and SEEDFI_API_KEY).", respondedAt: new Date() };
+  // Live only in production: SeedFi staging returns fixed test personas, never real credit data.
+  if (config.isProduction && s.environment !== "production") {
+    return { ok: false, httpStatus: null, code: "NOT_LIVE", message: "Production must use the live SeedFi service (https://loanengine.theseedfi.com), not staging.", respondedAt: new Date() };
+  }
   const url = `${s.baseUrl}/scoring/api/v1/seed-score/calculate`;
   const headers = { "Content-Type": "application/json", Accept: "application/json", "X-API-Key": s.apiKey };
   const body = {

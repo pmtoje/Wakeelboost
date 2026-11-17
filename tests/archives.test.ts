@@ -51,10 +51,11 @@ describe("facility repository and archive lifecycle", () => {
     const root = `HALIMA_YUSUF_${app.ref}/`;
     expect(names.every((n) => n.startsWith(root))).toBe(true);
     expect(names.some((n) => n.includes("/02-KYC/"))).toBe(true);
-    expect(names.some((n) => n.includes("/04-Supplier-invoice/"))).toBe(true);
-    expect(names.some((n) => n.includes("/05-Credit-assessment/"))).toBe(true);
-    expect(names.some((n) => n.includes("/06-Murabaha-offer-letter/"))).toBe(true);
-    expect(names.some((n) => n.includes("/07-Signed-offer-letter/"))).toBe(true);
+    expect(names.some((n) => n.includes("/05-Supplier-invoice/"))).toBe(true);
+    expect(names.some((n) => n.includes("/04-SeedFi-credit-check/SeedFi-credit-report") || n.includes("/04-SeedFi-credit-check/v1-SeedFi-credit-report"))).toBe(true);
+    expect(names.some((n) => n.includes("/06-Credit-assessment/"))).toBe(true);
+    expect(names.some((n) => n.includes("/07-Murabaha-offer-letter/"))).toBe(true);
+    expect(names.some((n) => n.includes("/08-Signed-offer-letter/"))).toBe(true);
     expect(names).toContain(`${root}00-Facility-record/Facility-record-${app.ref}.xlsx`);
     // Only real records: the workbook is built from the system's data for this facility.
     const wb = new ExcelJS.Workbook();
@@ -105,6 +106,8 @@ describe("facility repository and archive lifecycle", () => {
     const dl = await audits("FACILITY_ARCHIVE_DOWNLOADED");
     expect(dl.map((x) => x.outcome)).toEqual(["SUCCESS"]);
     expect((await audits("DOCUMENT_DOWNLOAD")).filter((x) => x.outcome === "DENIED").length).toBe(1);
+    // Disbursement officers work on the facility but do not see credit detail, so not the archive either.
+    await expect(readDocumentForActor(await ctxFor("do1@altbank.ng"), a.document_id!, "download")).rejects.toThrow(/credit information/);
   });
 
   it("retries a failed generation safely and keeps earlier archives when regenerated", async () => {

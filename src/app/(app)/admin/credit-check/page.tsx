@@ -36,6 +36,11 @@ export default async function CreditCheckAdmin() {
         <div className="metric"><div className="k">Acceptable minimum · basis</div><div className="v">{rules.minAcceptableScore}</div><span className="small muted">{rules.scoreBasis === "LOWER_OF_BOTH" ? "Lower of overall and reviewed score" : rules.scoreBasis === "OVERALL" ? "Overall score" : "Reviewed score"}</span></div>
         <div className="metric"><div className="k">Credit history required</div><div className="v">{rules.requireCreditHistory ? "Yes" : "No"}</div><span className="small muted">rules v{rules.version}</span></div>
       </div>
+      {s.configured && config.isProduction && s.environment !== "production" && (
+        <div className="alert alert-error" role="alert" style={{ marginBottom: 16 }}>
+          <span>This production server points at SeedFi <strong>staging</strong>, which returns test personas only. Credit checks are refused until <code>SEEDFI_BASE_URL</code> is set to <code>https://loanengine.theseedfi.com</code> with the live API key.</span>
+        </div>
+      )}
       {!s.configured && (
         <div className="alert alert-warn" style={{ marginBottom: 16 }}>
           <span>

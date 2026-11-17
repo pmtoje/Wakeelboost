@@ -12,6 +12,15 @@ indexes; no existing record is changed except where noted below.
 | 5 | God's Eye management oversight (Super Admin, Divisional Head, Unit Head) | `src/server/domain/metrics.ts`, `oversight.ts`, `/oversight`, migration 009 |
 | 6 | Personal month-to-date dashboards on every queue | `src/components/MyPerformance.tsx` |
 
+## SeedFi credit check report
+
+When a credit check completes (acceptable or adverse), a PDF report is generated automatically from the
+SeedFi response (scores, bands, credit history, component scores, narration when SeedFi sends it) and
+the recorded customer details and consent, with the bank's classification shown separately. It is
+filed with the facility (and in the archive under `04-SeedFi-credit-check`) and opens only for the
+initiator, the Product Manager, credit officers and approvers on the case and the Super Admin. No
+report is produced for a failed enquiry.
+
 ## Journey
 
 New request → customer identification and consent → SeedFi Seed Score → eligibility:
@@ -47,10 +56,14 @@ not received.
 
 ## Before production
 
-1. **SeedFi**: obtain the production API key after SeedFi's go-live sign-off; set `SEEDFI_BASE_URL`
-   and `SEEDFI_API_KEY` in the secret store. Verify against staging first with SeedFi's staging
-   personas. The live connection has **not** been verified in this build (no key was available);
-   all tests use a stand-in that answers in SeedFi's documented format.
+1. **SeedFi (live)**: set `SEEDFI_BASE_URL=https://loanengine.theseedfi.com` and the live
+   `SEEDFI_API_KEY` in the secret store. Production refuses SeedFi staging (test personas only).
+   Per SeedFi's documentation (v2.0, §1.3, §2.5) the live environment needs SeedFi's go-live
+   sign-off, and an API key is created by an authenticated account through
+   `POST /auth/api/v1/keys/create` and shown **once** at creation; the document does not describe
+   keys being emailed. Ask SeedFi to confirm go-live and the procedure for the bank's live account.
+   The live connection has **not** been verified in this build (no key was available); all tests
+   use a stand-in that answers in SeedFi's documented format.
 2. **Credit rules**: enter the bank's approved rules.
 3. **Product Manager**: grant the role (Users & roles) to the responsible staff.
 4. **Offer templates**: Super Admin → Offer templates → Preview sample → Approve each of the three

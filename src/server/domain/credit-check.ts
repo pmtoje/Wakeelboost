@@ -21,6 +21,7 @@ import { last4 } from "../mask";
 import { calculateSeedScore, type SeedScoreResult } from "../integrations/seedfi";
 import { holdsRole } from "./access";
 import { type AppRow, chooseAssignee, openTask } from "./assignment";
+import { storeCreditReport } from "./credit-report";
 
 export type CreditCheckStatus = "NOT_REQUIRED" | "REQUIRED" | "IN_PROGRESS" | "ACCEPTABLE" | "REVIEW_REQUIRED" | "CLARIFICATION_REQUIRED" | "CLEARED" | "UNAVAILABLE" | "DECLINED";
 
@@ -142,9 +143,15 @@ export async function creditCheckHistory(q: Db, appId: string): Promise<CreditCh
   return (await q.query<CreditCheckRow>("SELECT * FROM credit_checks WHERE application_id = $1 ORDER BY attempt_no DESC", [appId])).rows;
 }
 
-/** Narration and the full provider response are restricted to the Product Manager, credit officers on the case and the Super Admin. */
+/**
+ * Credit detail (component scores, narration, the SeedFi report and the facility archive): the
+ * initiator who ran the enquiry with the customer's consent, the Product Manager, credit officers and
+ * approvers on the case, and the Super Admin.
+ */
 export async function canSeeCreditDetail(q: Db, staffId: string, appId: string): Promise<boolean> {
   if (await holdsRole(q, staffId, "SUPER_ADMIN")) return true;
+  const init = await q.query("SELECT 1 FROM applications a WHERE a.id = $1 AND a.initiator_id = $2", [appId, staffId]);
+  if (init.rowCount && (await holdsRole(q, staffId, (await q.query("SELECT initiator_role FROM applications WHERE id = $1", [appId])).rows[0].initiator_role))) return true;
   const r = await q.query(
     `SELECT 1 FROM tasks WHERE application_id = $1 AND assignee_id = $2
        AND assignee_role IN ('PRODUCT_MANAGER','CREDIT_OFFICER_1','CREDIT_OFFICER_2','CREDIT_OFFICER_3','CREDIT_LEAD_1','CREDIT_LEAD_2','UNIT_HEAD','DIVISIONAL_HEAD') LIMIT 1`,
@@ -264,6 +271,8 @@ export async function runCreditCheck(ctx: Ctx, appId: string, input: Identificat
       [check.id, call.respondedAt, call.httpStatus, call.result.providerReference, call.result.overallScore, call.result.reviewedScore, call.result.hasCreditHistory,
         call.result.validityDate, JSON.stringify(call.result.components), encryptField(JSON.stringify(call.result.raw)), c.outcome, JSON.stringify(c.reasons), settings.version],
     );
+    // The credit report is produced from the stored response in the same transaction.
+    await storeCreditReport(tx, ctx, appId, check.id);
     const details = { creditCheckId: check.id, outcome: c.outcome, score: c.score, overall: call.result.overallScore, reviewed: call.result.reviewedScore, hasCreditHistory: call.result.hasCreditHistory, settingsVersion: settings.version, providerReference: call.result.providerReference };
     await audit(tx, ctx, { action: "CREDIT_CHECK_COMPLETED", actorRole: app0.initiator_role, applicationId: appId, stage: "DRAFT", details });
     if (c.outcome === "ACCEPTABLE") {
