@@ -12,7 +12,10 @@ export default async function StaffList({ searchParams }: { searchParams: Promis
   const q = (sp.q ?? "").toLowerCase();
   const rows = (
     await db.query(
-      `SELECT s.*, coalesce(json_agg(json_build_object('role', ra.role, 'region', ra.region) ORDER BY ra.role) FILTER (WHERE ra.id IS NOT NULL), '[]') AS roles
+      `SELECT s.*,
+              coalesce(s.region, (SELECT ra2.region FROM role_assignments ra2 WHERE ra2.staff_id = s.id AND ra2.active AND ra2.region IS NOT NULL ORDER BY ra2.granted_at DESC LIMIT 1)) AS display_region,
+              coalesce(s.business_unit, (SELECT ra2.business_unit FROM role_assignments ra2 WHERE ra2.staff_id = s.id AND ra2.active AND ra2.business_unit IS NOT NULL ORDER BY ra2.granted_at DESC LIMIT 1)) AS display_unit,
+              coalesce(json_agg(json_build_object('role', ra.role, 'region', ra.region) ORDER BY ra.role) FILTER (WHERE ra.id IS NOT NULL), '[]') AS roles
          FROM staff s LEFT JOIN role_assignments ra ON ra.staff_id = s.id AND ra.active
         WHERE ($1 = '' OR lower(s.full_name) LIKE '%' || $1 || '%' OR s.email LIKE '%' || $1 || '%')
         GROUP BY s.id ORDER BY s.full_name`,
@@ -49,7 +52,7 @@ export default async function StaffList({ searchParams }: { searchParams: Promis
                 <td><Link className="row-link" href={`/admin/staff/${r.id}`}>{r.full_name}</Link></td>
                 <td className="small">{r.email}</td>
                 <td><span className={`badge ${r.status === "ACTIVE" ? "badge-green" : "badge-red"}`}>{r.status}</span></td>
-                <td className="small">{r.region ?? "—"} {r.business_unit && `· ${r.business_unit}`}</td>
+                <td className="small">{r.display_region ?? "—"} {r.display_unit && `· ${r.display_unit}`}</td>
                 <td>
                   <div className="row" style={{ gap: 4 }}>
                     {r.roles.map((x: { role: Role; region: string | null }) => (

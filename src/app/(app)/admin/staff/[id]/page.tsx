@@ -24,6 +24,9 @@ export default async function StaffDetail({ params, searchParams }: { params: Pr
     )
   ).rows;
   const holders = (await db.query("SELECT role, staff_id FROM role_assignments WHERE active AND role = ANY($1::text[])", [SINGLE_HOLDER_ROLES])).rows;
+  const activeAssignment = assignments.find((a) => a.active);
+  const displayRegion = s.region ?? activeAssignment?.region ?? null;
+  const displayUnit = s.business_unit ?? activeAssignment?.business_unit ?? null;
   const self = id === session.staffId;
   const locked = await isSignInLocked(s.email);
   const open = Number((await db.query("SELECT count(*) AS n FROM tasks WHERE assignee_id = $1 AND status = 'OPEN'", [id])).rows[0].n);
@@ -33,7 +36,7 @@ export default async function StaffDetail({ params, searchParams }: { params: Pr
         <div>
           <p className="small muted" style={{ margin: 0 }}><Link href="/admin/staff">Staff &amp; roles</Link></p>
           <h1>{s.full_name}</h1>
-          <p>{s.email} · {s.region ?? "No state"} · {s.business_unit ?? "No unit"} · {open} open task(s)</p>
+          <p>{s.email} · {displayRegion ?? "No state"} · {displayUnit ?? "No unit"} · {open} open task(s)</p>
         </div>
         {!self && <StatusButton staffId={id} status={s.status} />}
       </div>
