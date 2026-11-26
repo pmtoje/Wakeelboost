@@ -94,6 +94,82 @@ export async function actionQueue(q: Db, staffId: string, query: QueueQuery) {
   return { rows, total, allTotal, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)), facets };
 }
 
+// ------------------------------------------------------------------ processed requests
+
+/** Outcome groups used by the "Processed Requests" view and the personal performance tiles. */
+export const PROCESSED_OUTCOMES = {
+  approved: ["ENDORSE", "APPROVE", "PROCEED"],
+  returned: ["RETURN", "SEND_FOR_CORRECTION", "REQUEST_INITIATOR"],
+  declined: ["REJECT"],
+} as const;
+export type ProcessedOutcome = keyof typeof PROCESSED_OUTCOMES;
+
+export interface ProcessedQuery {
+  outcome?: ProcessedOutcome | null;
+  q?: string | null;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ProcessedItem {
+  application_id: string;
+  ref: string;
+  customer_name: string | null;
+  requested_amount_kobo: string | null;
+  current_stage: Stage;
+  status: string;
+  decision_stage: Stage;
+  action: string;
+  acted_at: Date;
+  reason: string | null;
+  invalidated_at: Date | null;
+  open_task_id: string | null;
+  owner_name: string | null;
+  owner_role: string | null;
+}
+
+/**
+ * Cases the officer has decided on, latest decision per case. Access is retained only while the
+ * officer still holds the role they acted under (security review M6), matching caseAccess.
+ */
+export async function processedRequests(q: Db, staffId: string, query: ProcessedQuery = {}) {
+  const pageSize = Math.min(Math.max(query.pageSize ?? 20, 5), 100);
+  const page = Math.max(query.page ?? 1, 1);
+  const actions = query.outcome ? PROCESSED_OUTCOMES[query.outcome] : null;
+  const search = query.q ? `%${query.q.toLowerCase()}%` : null;
+  const mine = `WITH mine AS (
+      SELECT DISTINCT ON (d.application_id)
+             d.application_id, d.stage AS decision_stage, d.action, d.actor_role, d.created_at AS acted_at, d.reason, d.invalidated_at
+        FROM decisions d
+       WHERE d.actor_id = $1
+         AND EXISTS (SELECT 1 FROM role_assignments ra JOIN staff s ON s.id = ra.staff_id
+                      WHERE ra.staff_id = $1 AND ra.role = d.actor_role AND ra.active AND s.status = 'ACTIVE')
+       ORDER BY d.application_id, d.seq DESC
+    )`;
+  const where = `WHERE ($2::text IS NULL OR lower(a.ref) LIKE $2 OR lower(coalesce(a.customer_name, '')) LIKE $2)
+       AND ($3::text[] IS NULL OR m.action = ANY($3::text[]))`;
+  const params = [staffId, search, actions];
+  const total = Number(
+    (await q.query<{ n: string }>(`${mine} SELECT count(*) AS n FROM mine m JOIN applications a ON a.id = m.application_id ${where}`, params)).rows[0].n,
+  );
+  const rows = (
+    await q.query<ProcessedItem>(
+      `${mine}
+       SELECT a.id AS application_id, a.ref, a.customer_name, a.requested_amount_kobo, a.stage AS current_stage, a.status,
+              m.decision_stage, m.action, m.acted_at, m.reason, m.invalidated_at,
+              t.id AS open_task_id, s.full_name AS owner_name, t.assignee_role AS owner_role
+         FROM mine m JOIN applications a ON a.id = m.application_id
+         LEFT JOIN tasks t ON t.application_id = a.id AND t.status = 'OPEN'
+         LEFT JOIN staff s ON s.id = t.assignee_id
+         ${where}
+        ORDER BY m.acted_at DESC, a.ref
+        LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
+      params,
+    )
+  ).rows;
+  return { rows, total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
 // ------------------------------------------------------------------ initiator progress
 
 export async function initiatorRequests(q: Db, staffId: string) {

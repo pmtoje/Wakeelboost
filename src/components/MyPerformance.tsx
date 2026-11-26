@@ -57,9 +57,9 @@ export async function MyPerformance({ staffId, workspace }: { staffId: string; w
       <>
         <Tile k="Received for action" v={m.received} />
         <Tile k="Reviewed" v={m.reviewed} />
-        <Tile k="Approved / endorsed" v={m.approved} sub={naira(m.approvedValue)} />
-        <Tile k="Returned" v={m.returned} />
-        <Tile k="Declined" v={m.declined} />
+        <Tile k="Approved / endorsed" v={m.approved} sub={naira(m.approvedValue)} href="/requests/processed?outcome=approved" />
+        <Tile k="Returned" v={m.returned} href="/requests/processed?outcome=returned" />
+        <Tile k="Declined" v={m.declined} href="/requests/processed?outcome=declined" />
         <Tile k="Awaiting your action" v={m.waiting} />
         <Tile k="Average time to act" v={dur(m.avgTurnaroundMs)} />
       </>

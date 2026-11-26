@@ -1,4 +1,4 @@
-import { Eye, BookUser, Percent, BarChart3, BookCheck, ClipboardList, FilePlus2, FileText, History, Inbox, LayoutGrid, Mail, Route, ShieldCheck, Users, UsersRound, CalendarClock } from "lucide-react";
+import { Eye, BookUser, Percent, BarChart3, BookCheck, ClipboardCheck, ClipboardList, FilePlus2, FileText, History, Inbox, LayoutGrid, Mail, Route, ShieldCheck, Users, UsersRound, CalendarClock } from "lucide-react";
 import { requireUser } from "../_lib/auth";
 import { currentTheme } from "../_lib/theme";
 import { BankLogo, Footer, Wordmark } from "@/components/Brand";
@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ws = session.activeRole as Role | null;
   const queueCount = Number((await db.query("SELECT count(*) AS n FROM tasks WHERE status = 'OPEN' AND assignee_id = $1", [session.staffId])).rows[0].n);
   const isInitiatorWs = isInitiatorRole(ws);
+  const canProcess = roles.some((r) => !isInitiatorRole(r) && !["SUPER_ADMIN", "REPORTING_ADMIN", "LEGAL_REVIEWER", "SHARIAH_REVIEWER"].includes(r));
   const isAdmin = roles.includes("SUPER_ADMIN");
   const canReport = roles.includes("SUPER_ADMIN") || roles.includes("REPORTING_ADMIN");
   const oversight = roles.includes("SUPER_ADMIN") || roles.includes("DIVISIONAL_HEAD") || roles.includes("UNIT_HEAD");
@@ -39,6 +40,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/queue" count={queueCount} icon={<Inbox {...ic} />}>
             {ws === "PRODUCT_MANAGER" ? "Credit Review Queue" : "My Action Queue"}
           </NavLink>
+          {canProcess && (
+            <NavLink href="/requests/processed" icon={<ClipboardCheck {...ic} />}>
+              Processed Requests
+            </NavLink>
+          )}
           {isInitiatorWs && (
             <>
               <NavLink href="/requests/new" exact icon={<FilePlus2 {...ic} />}>

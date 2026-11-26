@@ -4,7 +4,7 @@ import { db } from "@/server/db";
 import { NAIRA } from "@/server/money";
 import { caseAccess } from "@/server/domain/access";
 import { canSeeCreditDetail } from "@/server/domain/credit-check";
-import { bookedRequests, getCase, revealIdentifiers } from "@/server/domain/views";
+import { bookedRequests, getCase, processedRequests, revealIdentifiers } from "@/server/domain/views";
 import { createDraft, saveDraft, submitApplication } from "@/server/domain/workflow";
 import { revokeRole } from "@/server/domain/admin";
 import { act, approveFirstReview, passCreditCheck, createSubmittedCase, ctxFor, driveToClosed, driveToOffer } from "@/server/demo/scenario";
@@ -82,6 +82,17 @@ describe("access control hardening (security review M5, M6)", () => {
     const draft = (await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" })).id;
     await passCreditCheck(rm, draft, "22212345678");
     await expect(saveDraft(await ctxFor("rm.ade@altbank.ng"), draft, { data: {}, nin: "1234" })).rejects.toMatchObject({ fields: { nin: "NIN must be 11 digits." } });
+  });
+
+  it("an endorser can find the cases they approved, until their role is removed", async () => {
+    const id = await createSubmittedCase({ initiator: "MERCHANT_OFFICER", amountKobo: NAIRA(1_000_000) });
+    await act(id, "ENDORSE");
+    const lead = await staffId("mo.lead@altbank.ng");
+    const approved = await processedRequests(db, lead, { outcome: "approved" });
+    expect(approved.rows.map((r) => r.application_id)).toContain(id);
+    await revokeRole(await ctxFor("superadmin@altbank.ng"), { staffId: lead, role: "MERCHANT_OFFICER_LEAD" });
+    const after = await processedRequests(db, lead, { outcome: "approved" });
+    expect(after.rows.map((r) => r.application_id)).not.toContain(id);
   });
 
   it("Booked Requests are limited to the regions a Reporting Admin is scoped to", async () => {
