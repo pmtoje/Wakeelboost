@@ -101,7 +101,7 @@ Key guarantees:
 - **Transactions.** Each approval and the next task commit atomically. One open task per case is enforced by a unique index. Actions are guarded by idempotency keys, row locks and `lock_version`.
 - **Assignment.** Random second-reviewer assignment uses a CSPRNG and is stored once, together with the eligible pool.
 - **Money and time.** Money is integer kobo (BigInt where multiplied). Timestamps are UTC, displayed in Africa/Lagos.
-- **Sensitive data.** BVN and TIN are AES-256-GCM encrypted and shown masked, with an audited reveal. They never appear in emails, exports or audit payloads.
+- **Sensitive data.** BVN, NIN and TIN are AES-256-GCM encrypted and shown masked. Only the credit reviewers on a case can reveal the full BVN and NIN (audited). They never appear in emails, exports or audit payloads.
 - **Documents.** Uploads are validated by content, quarantined and scanned. Every view or download needs a live session and a 5-minute HMAC link bound to user and session, and access is re-checked each time. Versions are never deleted.
 - **Sessions.** The 5-minute inactivity timeout is enforced server-side for every user. Background polling (`/api/session/status`) and worker jobs never extend a session. On timeout the UI is hidden and a new OTP is required.
 

@@ -125,6 +125,7 @@ export async function createSubmittedCase(opts: {
   await saveDraft(ctx, id, {
     data: { ...sampleData(type, opts.amountKobo, now), rbeId: rbe },
     bvn: type === "LIMITED" ? null : "22212345678",
+    nin: type === "LIMITED" ? null : "12345678901",
     tin: type === "INDIVIDUAL" ? null : "12345678-0001",
     directors: type === "LIMITED" ? [{ fullName: "Director One", bvn: "22200000001" }, { fullName: "Director Two", bvn: "22200000002" }, { fullName: "Director Three", bvn: "22200000003" }] : undefined,
   });

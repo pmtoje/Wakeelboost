@@ -427,7 +427,7 @@ export function RevealIdentifiers({ applicationId }: { applicationId: string }) 
   return (
     <ActionForm action={revealAction} refreshOnSuccess={false} showMessages={false}>
       {(state) => {
-        const d = state.data as { bvn: string | null; tin: string | null; directors: { fullName: string; bvn: string }[] } | undefined;
+        const d = state.data as { bvn: string | null; nin: string | null; directors: { fullName: string; bvn: string }[] } | undefined;
         return (
           <>
             <input type="hidden" name="applicationId" value={applicationId} />
@@ -435,7 +435,7 @@ export function RevealIdentifiers({ applicationId }: { applicationId: string }) 
             {d ? (
               <div className="highlight small" role="status">
                 {d.bvn && <div>BVN: <span className="mono">{d.bvn}</span></div>}
-                {d.tin && <div>TIN: <span className="mono">{d.tin}</span></div>}
+                {d.nin && <div>NIN: <span className="mono">{d.nin}</span></div>}
                 {d.directors.map((x, i) => (
                   <div key={i}>
                     {x.fullName}: <span className="mono">{x.bvn}</span>
@@ -446,7 +446,7 @@ export function RevealIdentifiers({ applicationId }: { applicationId: string }) 
             ) : (
               <div>
                 <SubmitButton className="btn btn-sm">
-                  <Eye className="icon" aria-hidden="true" /> Reveal identifiers (audited)
+                  <Eye className="icon" aria-hidden="true" /> Reveal BVN and NIN (audited)
                 </SubmitButton>
               </div>
             )}

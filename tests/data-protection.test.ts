@@ -28,12 +28,14 @@ describe("data protection (security review M9-M12)", () => {
     expect(v.material_digest).toMatch(/^h1:[0-9a-f]{64}$/);
     // Simulate a version stored before the change, then upgrade it at startup
     // A genuine legacy digest (plain SHA-256 of the same data) is upgraded to the keyed form
-    const row = (await db.query("SELECT data, bvn_enc, tin_enc FROM application_versions WHERE id = $1", [v.id])).rows[0];
+    const row = (await db.query("SELECT data, bvn_enc, tin_enc, nin_enc FROM application_versions WHERE id = $1", [v.id])).rows[0];
     const input = { type: "INDIVIDUAL" as const, data: row.data, bvnPlain: row.bvn_enc ? decryptField(row.bvn_enc) : null, tinPlain: row.tin_enc ? decryptField(row.tin_enc) : null, directors: [] };
-    expect(materialDigest(input)).toBe(v.material_digest);
-    await db.query("UPDATE application_versions SET material_digest = $2 WHERE id = $1", [v.id, legacyMaterialDigest(input)]);
+    expect(materialDigest({ ...input, ninPlain: decryptField(row.nin_enc) })).toBe(v.material_digest);
+    // Versions stored before NIN existed have none, and their digest is unchanged by the NIN field
+    expect(materialDigest({ ...input, ninPlain: null })).toBe(materialDigest(input));
+    await db.query("UPDATE application_versions SET nin_enc = NULL, nin_last4 = NULL, material_digest = $2 WHERE id = $1", [v.id, legacyMaterialDigest(input)]);
     expect(await upgradeMaterialDigests(db)).toBe(1);
-    expect((await db.query("SELECT material_digest FROM application_versions WHERE id = $1", [v.id])).rows[0].material_digest).toBe(v.material_digest);
+    expect((await db.query("SELECT material_digest FROM application_versions WHERE id = $1", [v.id])).rows[0].material_digest).toBe(materialDigest(input));
     // A legacy digest that no longer matches the data is cleared, never trusted
     await db.query("UPDATE application_versions SET material_digest = $2 WHERE id = $1", [v.id, "0".repeat(64)]);
     expect(await upgradeMaterialDigests(db)).toBe(1);

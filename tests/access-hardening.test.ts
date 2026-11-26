@@ -3,9 +3,10 @@ import { db } from "@/server/db";
 import { NAIRA } from "@/server/money";
 import { caseAccess } from "@/server/domain/access";
 import { canSeeCreditDetail } from "@/server/domain/credit-check";
-import { bookedRequests, revealIdentifiers } from "@/server/domain/views";
+import { bookedRequests, getCase, revealIdentifiers } from "@/server/domain/views";
+import { createDraft, saveDraft } from "@/server/domain/workflow";
 import { revokeRole } from "@/server/domain/admin";
-import { act, approveFirstReview, createSubmittedCase, ctxFor, driveToClosed, driveToOffer } from "@/server/demo/scenario";
+import { act, approveFirstReview, passCreditCheck, createSubmittedCase, ctxFor, driveToClosed, driveToOffer } from "@/server/demo/scenario";
 import { audits, resetDb, staffId } from "./helpers";
 
 beforeEach(async () => {
@@ -33,16 +34,37 @@ describe("access control hardening (security review M5, M6)", () => {
     expect((await caseAccess(db, rm, id)).canView).toBe(false);
   });
 
-  it("full BVN and TIN are revealed only on a need-to-know basis", async () => {
+  it("only the credit reviewers on a case can see the full BVN and NIN; everyone else sees them masked", async () => {
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000_000) });
     await act(id, "ENDORSE"); // the RBE endorsed and has moved on
-    // Initiator and the officer now holding the case may reveal
-    expect((await revealIdentifiers(await ctxFor("rm.ade@altbank.ng"), id)).bvn).toMatch(/^\d{11}$/);
-    expect((await revealIdentifiers(await ctxFor("co1@altbank.ng"), id)).bvn).toMatch(/^\d{11}$/);
-    // The endorser can still view the case but sees masked identifiers only
+    // The credit officer holding the case sees both in full
+    const r = await revealIdentifiers(await ctxFor("co1@altbank.ng"), id);
+    expect(r).toMatchObject({ bvn: "22212345678", nin: "12345678901" });
+    expect(r).not.toHaveProperty("tin");
+    // The initiator, the endorser and the Super Admin can view the case but not reveal
+    for (const email of ["rm.ade@altbank.ng", "rbe.lagos@altbank.ng", "superadmin@altbank.ng"]) {
+      await expect(revealIdentifiers(await ctxFor(email), id)).rejects.toThrow(/credit reviewers/);
+    }
     expect((await caseAccess(db, await staffId("rbe.lagos@altbank.ng"), id)).canView).toBe(true);
-    await expect(revealIdentifiers(await ctxFor("rbe.lagos@altbank.ng"), id)).rejects.toThrow(/shown only to/);
-    expect((await audits("SENSITIVE_REVEAL")).some((a) => a.outcome === "DENIED")).toBe(true);
+    expect((await audits("SENSITIVE_REVEAL")).filter((a) => a.outcome === "DENIED").length).toBe(3);
+    // A credit officer whose role is removed loses the reveal too
+    await revokeRole(await ctxFor("superadmin@altbank.ng"), { staffId: await staffId("co1@altbank.ng"), role: "CREDIT_OFFICER_1" });
+    await expect(revealIdentifiers(await ctxFor("co1@altbank.ng"), id)).rejects.toThrow();
+  });
+
+  it("the NIN is validated, stored encrypted and shown masked", async () => {
+    const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000_000) });
+    const v = (await db.query("SELECT nin_enc, nin_last4 FROM application_versions WHERE application_id = $1", [id])).rows[0];
+    expect(v.nin_last4).toBe("8901");
+    expect(v.nin_enc).not.toContain("12345678901");
+    const c = await getCase(await ctxFor("rm.ade@altbank.ng"), id);
+    expect(c.masked.nin).not.toContain("1234567");
+    expect(c.masked.nin).toContain("8901");
+    expect(c.canRevealIdentifiers).toBe(false);
+    const rm = await ctxFor("rm.ade@altbank.ng");
+    const draft = (await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" })).id;
+    await passCreditCheck(rm, draft, "22212345678");
+    await expect(saveDraft(await ctxFor("rm.ade@altbank.ng"), draft, { data: {}, nin: "1234" })).rejects.toMatchObject({ fields: { nin: "NIN must be 11 digits." } });
   });
 
   it("Booked Requests are limited to the regions a Reporting Admin is scoped to", async () => {

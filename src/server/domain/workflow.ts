@@ -28,6 +28,7 @@ import { kickArchive, openRepository, queueArchive } from "./archive";
 import { simpleEmail, caseLink } from "../notify/templates";
 import {
   BVN_RE,
+  NIN_RE,
   TIN_RE,
   assetCostKobo,
   displayCustomerName,
@@ -172,6 +173,7 @@ export interface DraftInput {
   data: Partial<DraftData>;
   bvn?: string | null;
   tin?: string | null;
+  nin?: string | null;
   directors?: DirectorFormRow[];
   expectedLockVersion?: number | null;
 }
@@ -219,6 +221,8 @@ interface VersionRow {
   bvn_last4: string | null;
   tin_enc: string | null;
   tin_last4: string | null;
+  nin_enc: string | null;
+  nin_last4: string | null;
   requested_amount_kobo: string | null;
   material_digest: string | null;
   submitted_at: Date | null;
@@ -235,8 +239,8 @@ async function ensureWorkingVersion(tx: Tx, ctx: Ctx, app: AppRow): Promise<Vers
   if (!app.current_version_id) throw new Error("No version to clone");
   const cur = (await tx.query<VersionRow>("SELECT * FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0];
   const ins = await tx.query<VersionRow>(
-    `INSERT INTO application_versions (application_id, version_no, data, bvn_enc, bvn_last4, tin_enc, tin_last4, requested_amount_kobo, created_by, created_at)
-     SELECT application_id, (SELECT max(version_no)+1 FROM application_versions WHERE application_id = $1), data, bvn_enc, bvn_last4, tin_enc, tin_last4,
+    `INSERT INTO application_versions (application_id, version_no, data, bvn_enc, bvn_last4, tin_enc, tin_last4, nin_enc, nin_last4, requested_amount_kobo, created_by, created_at)
+     SELECT application_id, (SELECT max(version_no)+1 FROM application_versions WHERE application_id = $1), data, bvn_enc, bvn_last4, tin_enc, tin_last4, nin_enc, nin_last4,
             requested_amount_kobo, $3, $4 FROM application_versions WHERE id = $2 RETURNING *`,
     [app.id, cur.id, ctx.actor!.staffId, ctx.now],
   );
@@ -282,6 +286,8 @@ export async function saveDraft(ctx: Ctx, appId: string, input: DraftInput) {
     let bvnL4 = v.bvn_last4;
     let tinEnc = v.tin_enc;
     let tinL4 = v.tin_last4;
+    let ninEnc = v.nin_enc;
+    let ninL4 = v.nin_last4;
     if (input.bvn) {
       const b = input.bvn.replace(/\s/g, "");
       if (!BVN_RE.test(b)) errors.bvn = "BVN must be 11 digits.";
@@ -298,9 +304,19 @@ export async function saveDraft(ctx: Ctx, appId: string, input: DraftInput) {
         tinL4 = last4(t);
       }
     }
+    if (input.nin) {
+      const n = input.nin.replace(/\s/g, "");
+      if (!NIN_RE.test(n)) errors.nin = "NIN must be 11 digits.";
+      else {
+        ninEnc = encryptField(n);
+        ninL4 = last4(n);
+      }
+    }
     if (app.applicant_type === "LIMITED") {
       bvnEnc = null;
       bvnL4 = null;
+      ninEnc = null;
+      ninL4 = null;
     }
     if (app.applicant_type === "INDIVIDUAL" && input.tin === "") {
       tinEnc = null;
@@ -334,8 +350,8 @@ export async function saveDraft(ctx: Ctx, appId: string, input: DraftInput) {
     if (Object.keys(errors).length) throw invalid("Some fields are not valid.", errors);
 
     await tx.query(
-      `UPDATE application_versions SET data=$2, bvn_enc=$3, bvn_last4=$4, tin_enc=$5, tin_last4=$6, requested_amount_kobo=$7 WHERE id=$1`,
-      [v.id, JSON.stringify(data), bvnEnc, bvnL4, tinEnc, tinL4, data.requestedAmountKobo],
+      `UPDATE application_versions SET data=$2, bvn_enc=$3, bvn_last4=$4, tin_enc=$5, tin_last4=$6, requested_amount_kobo=$7, nin_enc=$8, nin_last4=$9 WHERE id=$1`,
+      [v.id, JSON.stringify(data), bvnEnc, bvnL4, tinEnc, tinL4, data.requestedAmountKobo, ninEnc, ninL4],
     );
     if (directorRows) {
       await tx.query("DELETE FROM application_directors WHERE version_id = $1", [v.id]);
@@ -354,7 +370,7 @@ export async function saveDraft(ctx: Ctx, appId: string, input: DraftInput) {
       actorRole: app.initiator_role,
       applicationId: app.id,
       stage: app.stage,
-      details: { versionNo: v.version_no, bvnChanged: !!input.bvn, tinChanged: !!input.tin, directorCount: directorRows?.length ?? null },
+      details: { versionNo: v.version_no, bvnChanged: !!input.bvn, tinChanged: !!input.tin, ninChanged: !!input.nin, directorCount: directorRows?.length ?? null },
     });
     return { versionId: v.id };
   });
@@ -395,6 +411,7 @@ async function finaliseVersionForSubmission(tx: Tx, ctx: Ctx, app: AppRow): Prom
     data: version.data,
     bvnPlain: version.bvn_enc ? decryptField(version.bvn_enc) : null,
     tinPlain: version.tin_enc ? decryptField(version.tin_enc) : null,
+    ninPlain: version.nin_enc ? decryptField(version.nin_enc) : null,
     directors: directors.map((d: { full_name: string; bvn_enc: string }) => ({ fullName: d.full_name, bvnPlain: decryptField(d.bvn_enc) })),
   };
   const digest = materialDigest(digestInput);

@@ -34,6 +34,7 @@ interface DraftPayload {
   directors: { id?: string | null; fullName: string; bvn: string }[];
   bvn: string;
   tin: string;
+  nin?: string;
   amount: string;
   tenor: string;
 }
@@ -58,6 +59,7 @@ function parsePayload(raw: string) {
     data: { ...p.data, requestedAmountKobo: amount, tenorMonths: Number.isFinite(tenor) ? tenor : null, items, rbeId: (p.data.rbeId as string) || null },
     bvn: p.bvn || null,
     tin: p.tin || null,
+    nin: p.nin || null,
     directors: p.directors,
   };
 }
@@ -68,7 +70,7 @@ export async function saveDraftAction(_p: ActionState, fd: FormData): Promise<Ac
   const intent = str(fd, "intent");
   try {
     const parsed = parsePayload(str(fd, "payload"));
-    await saveDraft(ctx, appId, { data: parsed.data, bvn: parsed.bvn, tin: parsed.tin, directors: parsed.directors });
+    await saveDraft(ctx, appId, { data: parsed.data, bvn: parsed.bvn, tin: parsed.tin, nin: parsed.nin, directors: parsed.directors });
     if (intent === "submit") {
       const taskId = str(fd, "taskId");
       if (taskId) await performTaskAction(ctx, { taskId, action: "RESUBMIT", idempotencyKey: str(fd, "idempotencyKey") });

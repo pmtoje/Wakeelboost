@@ -83,6 +83,7 @@ export function DraftForm(props: {
   data: DraftFormData;
   maskedBvn: string | null;
   maskedTin: string | null;
+  maskedNin: string | null;
   directors: { id: string; fullName: string; masked: string }[];
   rbes: { id: string; label: string }[];
   isCorrection: boolean;
@@ -98,6 +99,7 @@ export function DraftForm(props: {
   const [directors, setDirectors] = useState<Director[]>(props.directors.length ? props.directors.map((x) => ({ ...x, bvn: "" })) : [{ fullName: "", bvn: "" }]);
   const [bvn, setBvn] = useState("");
   const [tin, setTin] = useState("");
+  const [nin, setNin] = useState("");
   const [intent, setIntent] = useState("save");
   const [key, setKey] = useState(() => crypto.randomUUID());
   const banner = useRef<HTMLDivElement>(null);
@@ -153,6 +155,7 @@ export function DraftForm(props: {
     directors: directors.map((x) => ({ id: x.id ?? null, fullName: x.fullName, bvn: x.bvn })),
     bvn,
     tin,
+    nin,
   });
 
   return (
@@ -208,11 +211,16 @@ export function DraftForm(props: {
 
       <section className="card">
         <h3>Restricted identifiers</h3>
-        <p className="small muted">Stored encrypted. Only the last four digits are displayed. Leave blank to keep the saved value.</p>
+        <p className="small muted">Stored encrypted. Only the last four digits are displayed; the full BVN and NIN are shown only to the credit reviewers. Leave blank to keep the saved value.</p>
         <div className="grid-2">
           {T !== "LIMITED" && (
             <Field f={f} id="bvn" label={T === "ENTERPRISE" ? "Proprietor BVN" : "BVN"} hint={props.maskedBvn ? `Saved: ${props.maskedBvn}` : "11 digits"}>
               <input id="bvn" value={bvn} onChange={(e) => setBvn(e.target.value)} inputMode="numeric" autoComplete="off" maxLength={11} aria-invalid={!!f.bvn} placeholder={props.maskedBvn ?? ""} />
+            </Field>
+          )}
+          {T !== "LIMITED" && (
+            <Field f={f} id="nin" label={T === "ENTERPRISE" ? "Proprietor NIN" : "NIN"} hint={props.maskedNin ? `Saved: ${props.maskedNin}` : "11-digit National Identification Number"}>
+              <input id="nin" value={nin} onChange={(e) => setNin(e.target.value)} inputMode="numeric" autoComplete="off" maxLength={11} aria-invalid={!!f.nin} placeholder={props.maskedNin ?? ""} />
             </Field>
           )}
           {T !== "INDIVIDUAL" && (

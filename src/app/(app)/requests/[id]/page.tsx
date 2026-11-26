@@ -327,7 +327,7 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
       <div className="card">
         <div className="card-head">
           <h2>Applicant</h2>
-          <RevealIdentifiers applicationId={app.id} />
+          {c.canRevealIdentifiers && <RevealIdentifiers applicationId={app.id} />}
         </div>
         {data ? (
           <table className="kv">
@@ -346,6 +346,7 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
               <tr><th>Phone / email</th><td>{data.phone} {data.email && `· ${data.email}`}</td></tr>
               <tr><th>Address</th><td>{data.address || "—"}</td></tr>
               {app.applicant_type !== "LIMITED" && <tr><th>BVN</th><td className="mono">{c.masked.bvn}</td></tr>}
+              {app.applicant_type !== "LIMITED" && <tr><th>NIN</th><td className="mono">{c.masked.nin}</td></tr>}
               {app.applicant_type !== "INDIVIDUAL" && <tr><th>TIN</th><td className="mono">{c.masked.tin}</td></tr>}
               {app.applicant_type === "LIMITED" && (
                 <tr>

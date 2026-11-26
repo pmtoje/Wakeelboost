@@ -71,6 +71,7 @@ export function displayCustomerName(type: ApplicantType, d: Pick<DraftData, "cus
 
 export const BVN_RE = /^\d{11}$/;
 export const TIN_RE = /^[0-9]{8,14}(-[0-9]{4})?$/;
+export const NIN_RE = /^\d{11}$/;
 
 /** Required documents at submission by applicant type. */
 export function requiredSubmissionDocuments(type: ApplicantType): string[] {
@@ -150,6 +151,8 @@ export interface MaterialProjectionInput {
   data: DraftData;
   bvnPlain: string | null;
   tinPlain: string | null;
+  /** Optional; left out of the digest when absent so digests stored before NIN existed still match. */
+  ninPlain?: string | null;
   directors: { fullName: string; bvnPlain: string }[];
 }
 
@@ -182,6 +185,7 @@ function materialJson(m: MaterialProjectionInput): string {
     bvn: m.bvnPlain,
     tin: m.tinPlain,
     directors: m.directors.map((x) => [x.fullName, x.bvnPlain]),
+    ...(m.ninPlain ? { nin: m.ninPlain } : {}),
   };
   return JSON.stringify(p);
 }

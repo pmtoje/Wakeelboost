@@ -206,6 +206,7 @@ export async function getCase(ctx: Ctx, appId: string) {
     app,
     archive: await archiveFor(db, appId),
     creditDetailAllowed: creditDetail,
+    canRevealIdentifiers: access.canView && (await isCreditReviewerOnCase(db, actor.staffId, appId)),
     credit: creditCheck ? { check: creditCheck, detail: creditDetail, narration: creditDetail ? creditResponseDetail(creditCheck).narration : null } : null,
     access,
     version,
@@ -226,30 +227,45 @@ export async function getCase(ctx: Ctx, appId: string) {
     masked: {
       bvn: maskWithLast4(version?.bvn_last4),
       tin: version?.tin_last4 ? maskWithLast4(version.tin_last4, 10) : "—",
+      nin: version?.nin_last4 ? maskWithLast4(version.nin_last4) : "—",
     },
   };
 }
 
-/** Reveal restricted identifiers to an authorised case stakeholder. Always audited. */
+/** Roles that review credit on a case; only they may see the full BVN and NIN. */
+export const CREDIT_REVIEWER_ROLES = ["CREDIT_OFFICER_1", "CREDIT_OFFICER_2", "CREDIT_OFFICER_3", "CREDIT_LEAD_1", "CREDIT_LEAD_2"] as const;
+
+/**
+ * True when the staff member is a credit reviewer on this case: assigned a credit-review task on it
+ * and still holding that role. Everyone else (initiator, endorsers, Product Manager, Unit and
+ * Divisional Heads, Disbursement, Legal, Shariah, Super Admin) sees the BVN and NIN masked.
+ */
+export async function isCreditReviewerOnCase(q: Db, staffId: string, appId: string): Promise<boolean> {
+  const r = await q.query(
+    `SELECT 1 FROM tasks t JOIN role_assignments ra ON ra.staff_id = t.assignee_id AND ra.role = t.assignee_role AND ra.active
+      WHERE t.application_id = $1 AND t.assignee_id = $2 AND t.assignee_role = ANY($3::text[]) LIMIT 1`,
+    [appId, staffId, [...CREDIT_REVIEWER_ROLES]],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/** Reveal the full BVN and NIN to a credit reviewer on the case, for further checks. Always audited. */
 export async function revealIdentifiers(ctx: Ctx, appId: string) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
-  // Need-to-know (security review M6): the initiator, the officer holding the case now, and the
-  // credit decision-makers on this case. Other viewers (Legal, Shariah, earlier assignees) see masked values.
   const access = await caseAccess(db, actor.staffId, appId);
-  const current = (await db.query("SELECT 1 FROM tasks WHERE application_id = $1 AND status = 'OPEN' AND assignee_id = $2", [appId, actor.staffId])).rowCount;
-  const allowed = access.canView && (access.capacities.includes("INITIATOR") || !!current || (await canSeeCreditDetail(db, actor.staffId, appId)));
+  const allowed = access.canView && (await isCreditReviewerOnCase(db, actor.staffId, appId));
   if (!allowed) {
     await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", outcome: "DENIED", applicationId: appId });
-    throw forbidden("Full BVN and TIN are shown only to the initiator, the officer holding the request and the credit decision-makers.");
+    throw forbidden("The full BVN and NIN are shown only to the credit reviewers on this request.");
   }
   const app = (await db.query("SELECT current_version_id FROM applications WHERE id = $1", [appId])).rows[0];
-  const v = app?.current_version_id ? (await db.query("SELECT bvn_enc, tin_enc FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0] : null;
+  const v = app?.current_version_id ? (await db.query("SELECT bvn_enc, nin_enc FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0] : null;
   const dirs = app?.current_version_id ? (await db.query("SELECT full_name, bvn_enc FROM application_directors WHERE version_id = $1 ORDER BY position", [app.current_version_id])).rows : [];
-  await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", applicationId: appId, details: { fields: ["bvn", "tin", "directors.bvn"] } });
+  await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", applicationId: appId, details: { fields: ["bvn", "nin", "directors.bvn"] } });
   return {
     bvn: v?.bvn_enc ? decryptField(v.bvn_enc) : null,
-    tin: v?.tin_enc ? decryptField(v.tin_enc) : null,
+    nin: v?.nin_enc ? decryptField(v.nin_enc) : null,
     directors: dirs.map((d: { full_name: string; bvn_enc: string | null }) => ({ fullName: d.full_name, bvn: d.bvn_enc ? decryptField(d.bvn_enc) : null })),
   };
 }
