@@ -352,9 +352,10 @@ function Overview({ c, data }: { c: Case; data: DraftData | null }) {
                 <tr>
                   <th>Directors ({c.directors.length})</th>
                   <td>
-                    {c.directors.map((d: { id: string; full_name: string; bvn_last4: string }) => (
+                    {c.directors.map((d: { id: string; full_name: string; bvn_last4: string; nin_last4: string | null }) => (
                       <div key={d.id}>
                         {d.full_name} · BVN <span className="mono">{maskWithLast4(d.bvn_last4)}</span>
+                        {d.nin_last4 && <> · NIN <span className="mono">{maskWithLast4(d.nin_last4)}</span></>}
                       </div>
                     ))}
                   </td>

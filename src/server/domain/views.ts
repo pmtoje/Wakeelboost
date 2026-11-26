@@ -167,7 +167,7 @@ export async function getCase(ctx: Ctx, appId: string) {
   const versionId = app.current_version_id;
   const version = versionId ? (await db.query("SELECT * FROM application_versions WHERE id = $1", [versionId])).rows[0] : null;
   const working = await workingVersionRead(db, appId);
-  const directors = version ? (await db.query("SELECT id, position, full_name, bvn_last4 FROM application_directors WHERE version_id = $1 ORDER BY position", [version.id])).rows : [];
+  const directors = version ? (await db.query("SELECT id, position, full_name, bvn_last4, nin_last4 FROM application_directors WHERE version_id = $1 ORDER BY position", [version.id])).rows : [];
   const versions = (await db.query("SELECT id, version_no, created_at, submitted_at, material_digest FROM application_versions WHERE application_id = $1 ORDER BY version_no", [appId])).rows;
   const tasks = (
     await db.query(
@@ -261,12 +261,16 @@ export async function revealIdentifiers(ctx: Ctx, appId: string) {
   }
   const app = (await db.query("SELECT current_version_id FROM applications WHERE id = $1", [appId])).rows[0];
   const v = app?.current_version_id ? (await db.query("SELECT bvn_enc, nin_enc, tin_enc FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0] : null;
-  const dirs = app?.current_version_id ? (await db.query("SELECT full_name, bvn_enc FROM application_directors WHERE version_id = $1 ORDER BY position", [app.current_version_id])).rows : [];
-  await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", applicationId: appId, details: { fields: ["bvn", "nin", "tin", "directors.bvn"] } });
+  const dirs = app?.current_version_id ? (await db.query("SELECT full_name, bvn_enc, nin_enc FROM application_directors WHERE version_id = $1 ORDER BY position", [app.current_version_id])).rows : [];
+  await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", applicationId: appId, details: { fields: ["bvn", "nin", "tin", "directors.bvn", "directors.nin"] } });
   return {
     bvn: v?.bvn_enc ? decryptField(v.bvn_enc) : null,
     nin: v?.nin_enc ? decryptField(v.nin_enc) : null,
     tin: v?.tin_enc ? decryptField(v.tin_enc) : null,
-    directors: dirs.map((d: { full_name: string; bvn_enc: string | null }) => ({ fullName: d.full_name, bvn: d.bvn_enc ? decryptField(d.bvn_enc) : null })),
+    directors: dirs.map((d: { full_name: string; bvn_enc: string | null; nin_enc: string | null }) => ({
+      fullName: d.full_name,
+      bvn: d.bvn_enc ? decryptField(d.bvn_enc) : null,
+      nin: d.nin_enc ? decryptField(d.nin_enc) : null,
+    })),
   };
 }

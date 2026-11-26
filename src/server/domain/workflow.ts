@@ -168,6 +168,7 @@ export interface DirectorFormRow {
   id?: string | null; // existing director row id (to keep BVN when the field is left blank)
   fullName: string;
   bvn?: string | null;
+  nin?: string | null;
 }
 export interface DraftInput {
   data: Partial<DraftData>;
@@ -245,8 +246,8 @@ async function ensureWorkingVersion(tx: Tx, ctx: Ctx, app: AppRow): Promise<Vers
     [app.id, cur.id, ctx.actor!.staffId, ctx.now],
   );
   await tx.query(
-    `INSERT INTO application_directors (version_id, position, full_name, bvn_enc, bvn_last4)
-     SELECT $2, position, full_name, bvn_enc, bvn_last4 FROM application_directors WHERE version_id = $1`,
+    `INSERT INTO application_directors (version_id, position, full_name, bvn_enc, bvn_last4, nin_enc, nin_last4)
+     SELECT $2, position, full_name, bvn_enc, bvn_last4, nin_enc, nin_last4 FROM application_directors WHERE version_id = $1`,
     [cur.id, ins.rows[0].id],
   );
   return ins.rows[0];
@@ -328,21 +329,32 @@ export async function saveDraft(ctx: Ctx, appId: string, input: DraftInput) {
     }
     if (app.initiator_role !== "RM") data.rbeId = null;
 
-    let directorRows: { full_name: string; bvn_enc: string; bvn_last4: string }[] | null = null;
+    let directorRows: { full_name: string; bvn_enc: string; bvn_last4: string; nin_enc: string | null; nin_last4: string | null }[] | null = null;
     if (input.directors && app.applicant_type === "LIMITED") {
       const existing = (await tx.query("SELECT * FROM application_directors WHERE version_id = $1", [v.id])).rows;
       directorRows = [];
       input.directors.forEach((d, idx) => {
         const name = (d.fullName ?? "").trim();
         const bvn = (d.bvn ?? "").replace(/\s/g, "");
-        if (!name && !bvn) return;
+        const nin = (d.nin ?? "").replace(/\s/g, "");
+        if (!name && !bvn && !nin) return;
         if (!name) errors[`directors.${idx}.fullName`] = "Director name is required.";
+        const ex = existing.find((e: { id: string }) => e.id === d.id);
+        // NIN where applicable: optional per director; blank keeps the saved value.
+        let ninEnc: string | null = ex?.nin_enc ?? null;
+        let ninL4: string | null = ex?.nin_last4 ?? null;
+        if (nin) {
+          if (!NIN_RE.test(nin)) errors[`directors.${idx}.nin`] = "Director NIN must be 11 digits.";
+          else {
+            ninEnc = encryptField(nin);
+            ninL4 = last4(nin);
+          }
+        }
         if (bvn) {
           if (!BVN_RE.test(bvn)) errors[`directors.${idx}.bvn`] = "Director BVN must be 11 digits.";
-          else directorRows!.push({ full_name: name, bvn_enc: encryptField(bvn), bvn_last4: last4(bvn) });
+          else directorRows!.push({ full_name: name, bvn_enc: encryptField(bvn), bvn_last4: last4(bvn), nin_enc: ninEnc, nin_last4: ninL4 });
         } else {
-          const ex = existing.find((e: { id: string }) => e.id === d.id);
-          if (ex) directorRows!.push({ full_name: name, bvn_enc: ex.bvn_enc, bvn_last4: ex.bvn_last4 });
+          if (ex) directorRows!.push({ full_name: name, bvn_enc: ex.bvn_enc, bvn_last4: ex.bvn_last4, nin_enc: ninEnc, nin_last4: ninL4 });
           else errors[`directors.${idx}.bvn`] = "Director BVN is required.";
         }
       });
@@ -356,7 +368,9 @@ export async function saveDraft(ctx: Ctx, appId: string, input: DraftInput) {
     if (directorRows) {
       await tx.query("DELETE FROM application_directors WHERE version_id = $1", [v.id]);
       for (const [i, d] of directorRows.entries()) {
-        await tx.query(`INSERT INTO application_directors (version_id, position, full_name, bvn_enc, bvn_last4) VALUES ($1,$2,$3,$4,$5)`, [v.id, i + 1, d.full_name, d.bvn_enc, d.bvn_last4]);
+        await tx.query(`INSERT INTO application_directors (version_id, position, full_name, bvn_enc, bvn_last4, nin_enc, nin_last4) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [
+          v.id, i + 1, d.full_name, d.bvn_enc, d.bvn_last4, d.nin_enc, d.nin_last4,
+        ]);
       }
     }
     if (app.stage === "DRAFT") {
@@ -388,6 +402,7 @@ async function finaliseVersionForSubmission(tx: Tx, ctx: Ctx, app: AppRow): Prom
     data: version.data,
     hasBvn: !!version.bvn_enc,
     hasTin: !!version.tin_enc,
+    hasNin: !!version.nin_enc,
     directors: directors.map((d: { full_name: string; bvn_enc: string }) => ({ fullName: d.full_name, hasBvn: !!d.bvn_enc })),
     currentDocumentCategories: [...new Set(docs.map((d) => d.category))],
     now: ctx.now,
@@ -412,7 +427,11 @@ async function finaliseVersionForSubmission(tx: Tx, ctx: Ctx, app: AppRow): Prom
     bvnPlain: version.bvn_enc ? decryptField(version.bvn_enc) : null,
     tinPlain: version.tin_enc ? decryptField(version.tin_enc) : null,
     ninPlain: version.nin_enc ? decryptField(version.nin_enc) : null,
-    directors: directors.map((d: { full_name: string; bvn_enc: string }) => ({ fullName: d.full_name, bvnPlain: decryptField(d.bvn_enc) })),
+    directors: directors.map((d: { full_name: string; bvn_enc: string; nin_enc: string | null }) => ({
+      fullName: d.full_name,
+      bvnPlain: decryptField(d.bvn_enc),
+      ninPlain: d.nin_enc ? decryptField(d.nin_enc) : null,
+    })),
   };
   const digest = materialDigest(digestInput);
   let material = false;

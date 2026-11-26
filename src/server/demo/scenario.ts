@@ -127,7 +127,7 @@ export async function createSubmittedCase(opts: {
     bvn: type === "LIMITED" ? null : "22212345678",
     nin: type === "LIMITED" ? null : "12345678901",
     tin: type === "INDIVIDUAL" ? null : "12345678-0001",
-    directors: type === "LIMITED" ? [{ fullName: "Director One", bvn: "22200000001" }, { fullName: "Director Two", bvn: "22200000002" }, { fullName: "Director Three", bvn: "22200000003" }] : undefined,
+    directors: type === "LIMITED" ? [{ fullName: "Director One", bvn: "22200000001", nin: "33300000001" }, { fullName: "Director Two", bvn: "22200000002" }, { fullName: "Director Three", bvn: "22200000003" }] : undefined,
   });
   const cats = ["BANK_STATEMENT", "SUPPLIER_INVOICE", "APPLICATION_FORM", "CONSENT_FORM", "RENT_RECEIPT", ...(type === "INDIVIDUAL" ? [] : ["CAC_CERTIFICATE"])];
   for (const c of cats) await uploadDocument(ctx, { applicationId: id, category: c, filename: `${c.toLowerCase()}.pdf`, data: makePdf(`${c} synthetic`) });

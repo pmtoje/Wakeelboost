@@ -59,5 +59,5 @@ tasks to themselves or edit their own roles. When nobody is eligible the task op
 Super Admin is emailed, and it appears under *Assignment exceptions*. Stages are never skipped.
 
 **Material fields** (fresh credit review): applicant type, names, registration number, amount, tenor,
-items, asset cost, supplier, invoice reference, BVN, TIN, directors. Contacts, DAO code, POS serial,
+items, asset cost, supplier, invoice reference, BVN, NIN, TIN, directors (with any NIN). Contacts, DAO code, POS serial,
 rental dates and RBE selection are non-material. Endorsement remains valid after a material change.

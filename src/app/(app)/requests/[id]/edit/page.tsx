@@ -63,7 +63,12 @@ export default async function EditRequest({ params }: { params: Promise<{ id: st
         maskedBvn={source?.bvn_last4 ? maskWithLast4(source.bvn_last4) : null}
         maskedTin={source?.tin_last4 ? maskWithLast4(source.tin_last4, 10) : null}
         maskedNin={source?.nin_last4 ? maskWithLast4(source.nin_last4) : null}
-        directors={(source?.directors ?? []).map((d: { id: string; full_name: string; bvn_last4: string }) => ({ id: d.id, fullName: d.full_name, masked: maskWithLast4(d.bvn_last4) }))}
+        directors={(source?.directors ?? []).map((d: { id: string; full_name: string; bvn_last4: string; nin_last4: string | null }) => ({
+          id: d.id,
+          fullName: d.full_name,
+          masked: maskWithLast4(d.bvn_last4),
+          maskedNin: d.nin_last4 ? maskWithLast4(d.nin_last4) : undefined,
+        }))}
         rbes={rbes.map((r) => ({ id: r.id, label: `${r.full_name}${r.region ? ` (${r.region})` : ""}` }))}
         isCorrection={!!myTask}
         required={required.map((r) => ({ code: r, label: CATEGORY_LABEL[r], done: docs.some((d) => d.category === r && d.scan_status === "CLEAN") }))}

@@ -31,7 +31,7 @@ export async function createDraftAction(_p: ActionState, fd: FormData): Promise<
 interface DraftPayload {
   data: Record<string, unknown>;
   items: { description: string; quantity: string; unitCost: string }[];
-  directors: { id?: string | null; fullName: string; bvn: string }[];
+  directors: { id?: string | null; fullName: string; bvn: string; nin?: string }[];
   bvn: string;
   tin: string;
   nin?: string;

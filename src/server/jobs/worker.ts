@@ -30,11 +30,11 @@ export async function retentionSweep(now = new Date()) {
   for (const a of due) {
     await withTx(async (tx) => {
       await tx.query("UPDATE application_versions SET bvn_enc = NULL, tin_enc = NULL, nin_enc = NULL WHERE application_id = $1", [a.id]);
-      await tx.query("UPDATE application_directors SET bvn_enc = NULL WHERE version_id IN (SELECT id FROM application_versions WHERE application_id = $1)", [a.id]);
+      await tx.query("UPDATE application_directors SET bvn_enc = NULL, nin_enc = NULL WHERE version_id IN (SELECT id FROM application_versions WHERE application_id = $1)", [a.id]);
       await tx.query("UPDATE credit_checks SET bvn_enc = NULL, response_enc = NULL, date_of_birth = NULL, phone = NULL WHERE application_id = $1", [a.id]);
       await tx.query("UPDATE notification_outbox SET body_text = '[purged after the retention period]' WHERE application_id = $1", [a.id]);
       await tx.query("UPDATE applications SET pii_purged_at = $2 WHERE id = $1", [a.id, now]);
-      await audit(tx, systemCtx(now), { action: "PERSONAL_DATA_PURGED", applicationId: a.id, details: { fields: ["bvn", "tin", "nin", "directors.bvn", "credit_check.response", "credit_check.date_of_birth", "credit_check.phone", "email_bodies"] } });
+      await audit(tx, systemCtx(now), { action: "PERSONAL_DATA_PURGED", applicationId: a.id, details: { fields: ["bvn", "tin", "nin", "directors.bvn", "directors.nin", "credit_check.response", "credit_check.date_of_birth", "credit_check.phone", "email_bodies"] } });
     });
   }
   const rows = (

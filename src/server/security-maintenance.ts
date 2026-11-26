@@ -40,6 +40,7 @@ const ENCRYPTED_COLUMNS: { table: string; column: string }[] = [
   { table: "application_versions", column: "tin_enc" },
   { table: "application_versions", column: "nin_enc" },
   { table: "application_directors", column: "bvn_enc" },
+  { table: "application_directors", column: "nin_enc" },
   { table: "credit_checks", column: "bvn_enc" },
   { table: "credit_checks", column: "response_enc" },
 ];

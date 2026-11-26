@@ -16,7 +16,9 @@ interface Director {
   id?: string | null;
   fullName: string;
   bvn: string;
+  nin: string;
   masked?: string;
+  maskedNin?: string;
 }
 export interface DraftFormData {
   customerName: string;
@@ -96,7 +98,7 @@ export function DraftForm(props: {
   const router = useRouter();
   const [d, setD] = useState<DraftFormData>(props.data);
   const [items, setItems] = useState<Item[]>(props.data.items.length ? props.data.items : [{ description: "", quantity: "", unitCost: "" }]);
-  const [directors, setDirectors] = useState<Director[]>(props.directors.length ? props.directors.map((x) => ({ ...x, bvn: "" })) : [{ fullName: "", bvn: "" }]);
+  const [directors, setDirectors] = useState<Director[]>(props.directors.length ? props.directors.map((x) => ({ ...x, bvn: "", nin: "" })) : [{ fullName: "", bvn: "", nin: "" }]);
   const [bvn, setBvn] = useState("");
   const [tin, setTin] = useState("");
   const [nin, setNin] = useState("");
@@ -152,7 +154,7 @@ export function DraftForm(props: {
     amount: d.amount,
     tenor: d.tenor,
     items,
-    directors: directors.map((x) => ({ id: x.id ?? null, fullName: x.fullName, bvn: x.bvn })),
+    directors: directors.map((x) => ({ id: x.id ?? null, fullName: x.fullName, bvn: x.bvn, nin: x.nin })),
     bvn,
     tin,
     nin,
@@ -219,7 +221,7 @@ export function DraftForm(props: {
             </Field>
           )}
           {T !== "LIMITED" && (
-            <Field f={f} id="nin" label={T === "ENTERPRISE" ? "Proprietor NIN" : "NIN"} hint={props.maskedNin ? `Saved: ${props.maskedNin}` : "11-digit National Identification Number"}>
+            <Field f={f} id="nin" label={T === "ENTERPRISE" ? "Proprietor NIN" : "NIN"} hint={props.maskedNin ? `Saved: ${props.maskedNin}` : "11 digits · required to submit"}>
               <input id="nin" value={nin} onChange={(e) => setNin(e.target.value)} inputMode="numeric" autoComplete="off" maxLength={11} aria-invalid={!!f.nin} placeholder={props.maskedNin ?? ""} />
             </Field>
           )}
@@ -249,6 +251,11 @@ export function DraftForm(props: {
                       <input id={`directors.${i}.bvn`} value={x.bvn} inputMode="numeric" maxLength={11} autoComplete="off" onChange={(e) => setDirectors(directors.map((y, j) => (j === i ? { ...y, bvn: e.target.value } : y)))} />
                     </Field>
                   </div>
+                  <div style={{ flex: 1 }}>
+                    <Field f={f} id={`directors.${i}.nin`} label="NIN (if applicable)" hint={x.maskedNin ? `Saved: ${x.maskedNin}` : undefined}>
+                      <input id={`directors.${i}.nin`} value={x.nin} inputMode="numeric" maxLength={11} autoComplete="off" onChange={(e) => setDirectors(directors.map((y, j) => (j === i ? { ...y, nin: e.target.value } : y)))} />
+                    </Field>
+                  </div>
                   {directors.length > 1 && (
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => setDirectors(directors.filter((_, j) => j !== i))} aria-label={`Remove director ${i + 1}`}>
                       Remove
@@ -257,7 +264,7 @@ export function DraftForm(props: {
                 </div>
               </div>
             ))}
-            <button type="button" className="btn btn-sm" onClick={() => setDirectors([...directors, { fullName: "", bvn: "" }])}>
+            <button type="button" className="btn btn-sm" onClick={() => setDirectors([...directors, { fullName: "", bvn: "", nin: "" }])}>
               Add director
             </button>
           </fieldset>

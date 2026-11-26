@@ -1,10 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
 import { NAIRA } from "@/server/money";
 import { caseAccess } from "@/server/domain/access";
 import { canSeeCreditDetail } from "@/server/domain/credit-check";
 import { bookedRequests, getCase, revealIdentifiers } from "@/server/domain/views";
-import { createDraft, saveDraft } from "@/server/domain/workflow";
+import { createDraft, saveDraft, submitApplication } from "@/server/domain/workflow";
 import { revokeRole } from "@/server/domain/admin";
 import { act, approveFirstReview, passCreditCheck, createSubmittedCase, ctxFor, driveToClosed, driveToOffer } from "@/server/demo/scenario";
 import { audits, resetDb, staffId } from "./helpers";
@@ -49,6 +50,23 @@ describe("access control hardening (security review M5, M6)", () => {
     // A credit officer whose role is removed loses the reveal too
     await revokeRole(await ctxFor("superadmin@altbank.ng"), { staffId: await staffId("co1@altbank.ng"), role: "CREDIT_OFFICER_1" });
     await expect(revealIdentifiers(await ctxFor("co1@altbank.ng"), id)).rejects.toThrow();
+  });
+
+  it("the NIN is required to submit; a director's NIN is optional and revealed only to credit reviewers", async () => {
+    const rm = await ctxFor("rm.ade@altbank.ng");
+    const draft = (await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" })).id;
+    await passCreditCheck(rm, draft, "22212345678");
+    await saveDraft(rm, draft, { data: {}, bvn: "22212345678" });
+    await expect(submitApplication(rm, draft, randomUUID())).rejects.toMatchObject({ fields: expect.objectContaining({ nin: "NIN is required." }) });
+
+    const ltd = await createSubmittedCase({ initiator: "RM", type: "LIMITED", amountKobo: NAIRA(1_000_000) });
+    await act(ltd, "ENDORSE");
+    const c = await getCase(rm, ltd);
+    expect(c.directors.map((d: { nin_last4: string | null }) => d.nin_last4)).toEqual(["0001", null, null]);
+    const r = await revealIdentifiers(await ctxFor("co1@altbank.ng"), ltd);
+    expect(r.directors[0]).toMatchObject({ fullName: "Director One", bvn: "22200000001", nin: "33300000001" });
+    expect(r.directors[1].nin).toBeNull();
+    await expect(revealIdentifiers(rm, ltd)).rejects.toThrow(/credit reviewers/);
   });
 
   it("the NIN is validated, stored encrypted and shown masked", async () => {

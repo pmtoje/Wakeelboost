@@ -25,7 +25,7 @@ async function newDraft() {
 }
 async function completeAndSubmit(rm: Awaited<ReturnType<typeof ctxFor>>, id: string) {
   const rbe = await staffId("rbe.lagos@altbank.ng");
-  await saveDraft(rm, id, { data: { ...sampleData("INDIVIDUAL", NAIRA(3_000_000)), customerName: "Busayo Okon", rbeId: rbe } });
+  await saveDraft(rm, id, { data: { ...sampleData("INDIVIDUAL", NAIRA(3_000_000)), customerName: "Busayo Okon", rbeId: rbe }, nin: "12345678901" });
   for (const c of ["BANK_STATEMENT", "SUPPLIER_INVOICE", "APPLICATION_FORM", "CONSENT_FORM", "RENT_RECEIPT"]) await uploadDocument(rm, { applicationId: id, category: c, filename: `${c}.pdf`, data: makePdf(c) });
   return submitApplication(rm, id, randomUUID());
 }
@@ -72,7 +72,7 @@ describe("mandatory credit check comes first", () => {
   it("the submitted application must describe the credit-checked customer", async () => {
     const { rm, id } = await newDraft();
     await runCreditCheck(rm, id, ident("22233344455"), randomUUID());
-    await saveDraft(rm, id, { data: {}, bvn: "22233344499" });
+    await saveDraft(rm, id, { data: {}, bvn: "22233344499", nin: "12345678901" });
     await expect(completeAndSubmit(rm, id)).rejects.toMatchObject({ fields: { bvn: expect.stringMatching(/credit-checked BVN ending 4455/) } });
   });
 
@@ -257,7 +257,7 @@ describe("existing applications", () => {
   it("requests created before the credit check keep working unchanged", async () => {
     const { rm, id } = await newDraft();
     await db.query("UPDATE applications SET credit_check_status = 'NOT_REQUIRED', credit_check_note = 'Created before the mandatory credit check' WHERE id = $1", [id]);
-    await saveDraft(rm, id, { data: {}, bvn: "22212345678" });
+    await saveDraft(rm, id, { data: {}, bvn: "22212345678", nin: "12345678901" });
     await completeAndSubmit(rm, id);
     expect((await openTaskOf(id)).stage).toBe("BUSINESS_ENDORSEMENT");
   });
@@ -442,7 +442,7 @@ describe("while SeedFi is not set up", () => {
       const anm = await ctxFor("anm.south@altbank.ng");
       const { id } = await createDraft(anm, { initiatorRole: "ANM", applicantType: "INDIVIDUAL" });
       expect(await appRow(id)).toMatchObject({ credit_check_status: "NOT_REQUIRED", credit_check_note: "SeedFi credit check not active when this request was created" });
-      await saveDraft(anm, id, { data: { ...sampleData("INDIVIDUAL", NAIRA(2_000_000)) }, bvn: "22212345678" });
+      await saveDraft(anm, id, { data: { ...sampleData("INDIVIDUAL", NAIRA(2_000_000)) }, bvn: "22212345678", nin: "12345678901" });
       for (const c of ["BANK_STATEMENT", "SUPPLIER_INVOICE", "APPLICATION_FORM", "CONSENT_FORM", "RENT_RECEIPT"]) await uploadDocument(anm, { applicationId: id, category: c, filename: `${c}.pdf`, data: makePdf(c) });
       await submitApplication(anm, id, randomUUID());
       expect((await openTaskOf(id)).stage).toBe("BUSINESS_ENDORSEMENT");
@@ -453,7 +453,7 @@ describe("while SeedFi is not set up", () => {
     const { rm, id } = await newDraft(); // created while SeedFi was set up
     expect((await appRow(id)).credit_check_status).toBe("REQUIRED");
     await inactive(async () => {
-      await saveDraft(rm, id, { data: {}, bvn: "22212345678" });
+      await saveDraft(rm, id, { data: {}, bvn: "22212345678", nin: "12345678901" });
       await completeAndSubmit(rm, id);
       expect((await openTaskOf(id)).stage).toBe("BUSINESS_ENDORSEMENT");
       expect(await appRow(id)).toMatchObject({ credit_check_status: "NOT_REQUIRED", credit_check_note: "SeedFi credit check not active when this request was submitted" });
@@ -520,7 +520,7 @@ describe("once SeedFi has been activated (security review H5)", () => {
   it("a draft waiting for the check is never released without one", async () => {
     const { rm, id } = await newDraft();
     await activated(async () => {
-      await saveDraft(rm, id, { data: {}, bvn: "22212345678" }).catch(() => undefined);
+      await saveDraft(rm, id, { data: {}, bvn: "22212345678", nin: "12345678901" }).catch(() => undefined);
       await expect(submitApplication(rm, id, randomUUID())).rejects.toThrow();
       expect((await appRow(id)).credit_check_status).toBe("REQUIRED");
       expect((await audits("CREDIT_CHECK_NOT_ACTIVE")).length).toBe(0);

@@ -187,13 +187,16 @@ Re-deploying this build afterwards resumes from the stored state.
 
 ## NIN and identifier visibility (26 Nov 2026)
 
-- **NIN captured.** The draft form's Restricted identifiers section has an optional 11-digit NIN for
-  Individual applicants and Enterprise proprietors. It is AES-256-GCM encrypted (`nin_enc`), only the
-  last four digits are kept in clear (`nin_last4`), and it is included in key rotation, the retention
-  purge and the change-detection digest (versions saved before this change are unaffected).
+- **NIN captured.** The draft form's Restricted identifiers section has an 11-digit NIN for
+  Individual applicants and Enterprise proprietors; it is **required to submit**. Directors of a
+  Limited company have an optional "NIN (if applicable)" field. NINs are AES-256-GCM encrypted
+  (`nin_enc`), only the last four digits are kept in clear (`nin_last4`), and they are included in
+  key rotation, the retention purge and the change-detection digest (versions saved before this
+  change are unaffected). Requests returned for correction need the NIN before resubmission.
 - **Who sees the full BVN, TIN and NIN.** Only the credit reviewers on the case: staff assigned a Credit
   Officer 1/2/3 or Credit Lead 1/2 task on it who still hold that role. They get a "Reveal BVN, TIN and
   NIN (audited)" button. Everyone else, including the initiator, endorsers, Product Manager, Unit and
   Divisional Heads, Disbursement, Legal, Shariah and Super Admin, sees masked values and no button;
   a direct attempt is refused and recorded as `SENSITIVE_REVEAL` / `DENIED`.
-- **Deploy.** Migration `017_nin.sql` adds the two columns; it runs with the other migrations.
+- **Offer letters** keep printing the full BVN, as the approved templates require.
+- **Deploy.** Migration `017_nin.sql` adds the NIN columns to versions and directors; it runs with the other migrations.

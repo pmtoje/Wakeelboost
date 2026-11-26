@@ -427,7 +427,7 @@ export function RevealIdentifiers({ applicationId }: { applicationId: string }) 
   return (
     <ActionForm action={revealAction} refreshOnSuccess={false} showMessages={false}>
       {(state) => {
-        const d = state.data as { bvn: string | null; nin: string | null; tin: string | null; directors: { fullName: string; bvn: string }[] } | undefined;
+        const d = state.data as { bvn: string | null; nin: string | null; tin: string | null; directors: { fullName: string; bvn: string | null; nin: string | null }[] } | undefined;
         return (
           <>
             <input type="hidden" name="applicationId" value={applicationId} />
@@ -439,7 +439,12 @@ export function RevealIdentifiers({ applicationId }: { applicationId: string }) 
                 {d.tin && <div>TIN: <span className="mono">{d.tin}</span></div>}
                 {d.directors.map((x, i) => (
                   <div key={i}>
-                    {x.fullName}: <span className="mono">{x.bvn}</span>
+                    {x.fullName}: BVN <span className="mono">{x.bvn ?? "—"}</span>
+                    {x.nin && (
+                      <>
+                        {" "}· NIN <span className="mono">{x.nin}</span>
+                      </>
+                    )}
                   </div>
                 ))}
                 <div className="muted">This reveal was recorded in the audit trail.</div>

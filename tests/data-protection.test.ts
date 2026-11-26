@@ -46,17 +46,21 @@ describe("data protection (security review M9-M12)", () => {
   it("M11: keys rotate without downtime, and re-encryption moves every field to the new key", async () => {
     await createSubmittedCase({ initiator: "RM", type: "LIMITED", amountKobo: NAIRA(1_000_000) });
     const oldKey = process.env.FIELD_ENCRYPTION_KEY!;
-    const sample = (await db.query("SELECT bvn_enc FROM application_directors LIMIT 1")).rows[0].bvn_enc;
+    const { id: dirId, bvn_enc: sample, nin_enc: ninSample } = (await db.query("SELECT id, bvn_enc, nin_enc FROM application_directors WHERE nin_enc IS NOT NULL LIMIT 1")).rows[0];
     const plain = decryptField(sample);
     process.env.FIELD_ENCRYPTION_KEY = randomBytes(32).toString("base64");
     process.env.FIELD_ENCRYPTION_KEYS_PREVIOUS = oldKey;
     expect(decryptField(sample)).toBe(plain); // still readable during the rotation
     const r = await reencryptFields(db);
     expect(r["application_directors.bvn_enc"]).toBeGreaterThan(0);
+    expect(r["application_directors.nin_enc"]).toBe(1);
+    expect(r["application_versions.nin_enc"]).toBeGreaterThanOrEqual(0);
     expect(Object.values(await reencryptFields(db)).every((n) => n === 0)).toBe(true); // idempotent
     delete process.env.FIELD_ENCRYPTION_KEYS_PREVIOUS; // old key retired
-    const after = (await db.query("SELECT bvn_enc FROM application_directors LIMIT 1")).rows[0].bvn_enc;
-    expect(decryptField(after)).toBe(plain);
+    const after = (await db.query("SELECT bvn_enc, nin_enc FROM application_directors WHERE id = $1", [dirId])).rows[0];
+    expect(decryptField(after.bvn_enc)).toBe(plain);
+    expect(decryptField(after.nin_enc)).toBe("33300000001");
+    expect(() => decryptField(ninSample)).toThrow();
     expect(() => decryptField(sample)).toThrow(); // old ciphertext no longer readable without the old key
     expect(decryptField(encryptField("x"))).toBe("x");
   });

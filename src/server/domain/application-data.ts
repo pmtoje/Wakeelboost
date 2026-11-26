@@ -85,6 +85,7 @@ export interface SubmissionCheckInput {
   data: DraftData;
   hasBvn: boolean;
   hasTin: boolean;
+  hasNin: boolean;
   directors: { fullName: string; hasBvn: boolean }[];
   currentDocumentCategories: string[];
   now: Date;
@@ -132,6 +133,7 @@ export function validateForSubmission(i: SubmissionCheckInput): Record<string, s
 
   // Restricted identifiers
   if (i.type !== "LIMITED" && !i.hasBvn) e.bvn = "BVN is required.";
+  if (i.type !== "LIMITED" && !i.hasNin) e.nin = "NIN is required.";
   if (i.type !== "INDIVIDUAL" && !i.hasTin) e.tin = "TIN is required.";
   if (i.type === "LIMITED") {
     if (i.directors.length === 0) e.directors = "Add every director with their BVN.";
@@ -153,7 +155,7 @@ export interface MaterialProjectionInput {
   tinPlain: string | null;
   /** Optional; left out of the digest when absent so digests stored before NIN existed still match. */
   ninPlain?: string | null;
-  directors: { fullName: string; bvnPlain: string }[];
+  directors: { fullName: string; bvnPlain: string; ninPlain?: string | null }[];
 }
 
 /**
@@ -184,7 +186,8 @@ function materialJson(m: MaterialProjectionInput): string {
     invoiceRef: m.data.invoiceRef,
     bvn: m.bvnPlain,
     tin: m.tinPlain,
-    directors: m.directors.map((x) => [x.fullName, x.bvnPlain]),
+    // A director NIN is appended only when present, so digests stored before it existed still match.
+    directors: m.directors.map((x) => (x.ninPlain ? [x.fullName, x.bvnPlain, x.ninPlain] : [x.fullName, x.bvnPlain])),
     ...(m.ninPlain ? { nin: m.ninPlain } : {}),
   };
   return JSON.stringify(p);
