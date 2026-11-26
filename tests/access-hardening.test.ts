@@ -34,13 +34,12 @@ describe("access control hardening (security review M5, M6)", () => {
     expect((await caseAccess(db, rm, id)).canView).toBe(false);
   });
 
-  it("only the credit reviewers on a case can see the full BVN and NIN; everyone else sees them masked", async () => {
-    const id = await createSubmittedCase({ initiator: "RM", amountKobo: NAIRA(1_000_000) });
+  it("only the credit reviewers on a case can see the full BVN, TIN and NIN; everyone else sees them masked", async () => {
+    const id = await createSubmittedCase({ initiator: "RM", type: "ENTERPRISE", amountKobo: NAIRA(1_000_000) });
     await act(id, "ENDORSE"); // the RBE endorsed and has moved on
-    // The credit officer holding the case sees both in full
+    // The credit officer holding the case sees all three in full
     const r = await revealIdentifiers(await ctxFor("co1@altbank.ng"), id);
-    expect(r).toMatchObject({ bvn: "22212345678", nin: "12345678901" });
-    expect(r).not.toHaveProperty("tin");
+    expect(r).toMatchObject({ bvn: "22212345678", nin: "12345678901", tin: "12345678-0001" });
     // The initiator, the endorser and the Super Admin can view the case but not reveal
     for (const email of ["rm.ade@altbank.ng", "rbe.lagos@altbank.ng", "superadmin@altbank.ng"]) {
       await expect(revealIdentifiers(await ctxFor(email), id)).rejects.toThrow(/credit reviewers/);

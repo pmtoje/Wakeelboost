@@ -232,13 +232,13 @@ export async function getCase(ctx: Ctx, appId: string) {
   };
 }
 
-/** Roles that review credit on a case; only they may see the full BVN and NIN. */
+/** Roles that review credit on a case; only they may see the full BVN, TIN and NIN. */
 export const CREDIT_REVIEWER_ROLES = ["CREDIT_OFFICER_1", "CREDIT_OFFICER_2", "CREDIT_OFFICER_3", "CREDIT_LEAD_1", "CREDIT_LEAD_2"] as const;
 
 /**
  * True when the staff member is a credit reviewer on this case: assigned a credit-review task on it
  * and still holding that role. Everyone else (initiator, endorsers, Product Manager, Unit and
- * Divisional Heads, Disbursement, Legal, Shariah, Super Admin) sees the BVN and NIN masked.
+ * Divisional Heads, Disbursement, Legal, Shariah, Super Admin) sees the BVN, TIN and NIN masked.
  */
 export async function isCreditReviewerOnCase(q: Db, staffId: string, appId: string): Promise<boolean> {
   const r = await q.query(
@@ -249,7 +249,7 @@ export async function isCreditReviewerOnCase(q: Db, staffId: string, appId: stri
   return (r.rowCount ?? 0) > 0;
 }
 
-/** Reveal the full BVN and NIN to a credit reviewer on the case, for further checks. Always audited. */
+/** Reveal the full BVN, TIN and NIN to a credit reviewer on the case, for further checks. Always audited. */
 export async function revealIdentifiers(ctx: Ctx, appId: string) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
@@ -257,15 +257,16 @@ export async function revealIdentifiers(ctx: Ctx, appId: string) {
   const allowed = access.canView && (await isCreditReviewerOnCase(db, actor.staffId, appId));
   if (!allowed) {
     await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", outcome: "DENIED", applicationId: appId });
-    throw forbidden("The full BVN and NIN are shown only to the credit reviewers on this request.");
+    throw forbidden("The full BVN, TIN and NIN are shown only to the credit reviewers on this request.");
   }
   const app = (await db.query("SELECT current_version_id FROM applications WHERE id = $1", [appId])).rows[0];
-  const v = app?.current_version_id ? (await db.query("SELECT bvn_enc, nin_enc FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0] : null;
+  const v = app?.current_version_id ? (await db.query("SELECT bvn_enc, nin_enc, tin_enc FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0] : null;
   const dirs = app?.current_version_id ? (await db.query("SELECT full_name, bvn_enc FROM application_directors WHERE version_id = $1 ORDER BY position", [app.current_version_id])).rows : [];
-  await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", applicationId: appId, details: { fields: ["bvn", "nin", "directors.bvn"] } });
+  await auditOutsideTx(ctx, { action: "SENSITIVE_REVEAL", applicationId: appId, details: { fields: ["bvn", "nin", "tin", "directors.bvn"] } });
   return {
     bvn: v?.bvn_enc ? decryptField(v.bvn_enc) : null,
     nin: v?.nin_enc ? decryptField(v.nin_enc) : null,
+    tin: v?.tin_enc ? decryptField(v.tin_enc) : null,
     directors: dirs.map((d: { full_name: string; bvn_enc: string | null }) => ({ fullName: d.full_name, bvn: d.bvn_enc ? decryptField(d.bvn_enc) : null })),
   };
 }

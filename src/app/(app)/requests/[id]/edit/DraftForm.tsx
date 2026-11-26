@@ -211,7 +211,7 @@ export function DraftForm(props: {
 
       <section className="card">
         <h3>Restricted identifiers</h3>
-        <p className="small muted">Stored encrypted. Only the last four digits are displayed; the full BVN and NIN are shown only to the credit reviewers. Leave blank to keep the saved value.</p>
+        <p className="small muted">Stored encrypted. Only the last four digits are displayed; the full BVN, TIN and NIN are shown only to the credit reviewers. Leave blank to keep the saved value.</p>
         <div className="grid-2">
           {T !== "LIMITED" && (
             <Field f={f} id="bvn" label={T === "ENTERPRISE" ? "Proprietor BVN" : "BVN"} hint={props.maskedBvn ? `Saved: ${props.maskedBvn}` : "11 digits"}>

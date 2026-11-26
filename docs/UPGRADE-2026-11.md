@@ -142,7 +142,7 @@ Medium findings (second pass, same day):
   1 MB generally, 4 MB for tablet signatures, 11 MB for admin imports, the upload limit + 1 MB for
   documents); uploads must declare their length.
 - **Access (M5–M8).** Booked Requests honour a Reporting Admin's region scope; case and credit access
-  end when the role is removed; the full BVN and NIN are revealed only to the credit reviewers on the case
+  end when the role is removed; the full BVN, TIN and NIN are revealed only to the credit reviewers on the case
   (Credit Officers 1–3 and Credit Leads holding the role; see "NIN and identifier visibility" below); at disbursement correction Credit Officer 3 returns the pack to
   the initiator instead of replacing customer-signed documents; bureau credit reports and DSR evidence
   are restricted like the SeedFi report.
@@ -191,9 +191,9 @@ Re-deploying this build afterwards resumes from the stored state.
   Individual applicants and Enterprise proprietors. It is AES-256-GCM encrypted (`nin_enc`), only the
   last four digits are kept in clear (`nin_last4`), and it is included in key rotation, the retention
   purge and the change-detection digest (versions saved before this change are unaffected).
-- **Who sees the full BVN and NIN.** Only the credit reviewers on the case: staff assigned a Credit
-  Officer 1/2/3 or Credit Lead 1/2 task on it who still hold that role. They get a "Reveal BVN and NIN
-  (audited)" button. Everyone else, including the initiator, endorsers, Product Manager, Unit and
+- **Who sees the full BVN, TIN and NIN.** Only the credit reviewers on the case: staff assigned a Credit
+  Officer 1/2/3 or Credit Lead 1/2 task on it who still hold that role. They get a "Reveal BVN, TIN and
+  NIN (audited)" button. Everyone else, including the initiator, endorsers, Product Manager, Unit and
   Divisional Heads, Disbursement, Legal, Shariah and Super Admin, sees masked values and no button;
-  a direct attempt is refused and recorded as `SENSITIVE_REVEAL` / `DENIED`. TIN stays masked for all.
+  a direct attempt is refused and recorded as `SENSITIVE_REVEAL` / `DENIED`.
 - **Deploy.** Migration `017_nin.sql` adds the two columns; it runs with the other migrations.
